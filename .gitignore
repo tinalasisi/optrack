@@ -1,0 +1,70 @@
+# -----------------------
+# PYTHON
+# -----------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.pkl
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+.python-version
+
+# Pip/poetry caches
+pip-log.txt
+pip-delete-this-directory.txt
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# PyInstaller artifacts
+*.manifest
+*.spec
+
+# Coverage and testing
+.coverage
+.tox/
+.nox/
+htmlcov/
+.cache/
+.pytest_cache/
+nosetests.xml
+coverage.xml
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb~
+
+# -----------------------
+# ENV & DOTFILES
+# -----------------------
+.env
+.env.*
+*.env
+*.envrc
+*.secret
+
+# -----------------------
+# IDEs and Text Editors
+# -----------------------
+.vscode/
+.idea/
+*.sublime*
+*.swp
+*.bak
+*~
+
+# -----------------------
+# OS files
+# -----------------------
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
