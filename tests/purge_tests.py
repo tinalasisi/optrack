@@ -10,7 +10,7 @@ from pathlib import Path
 import argparse
 
 # Directory setup
-BASE_DIR = Path(__file__).parent
+BASE_DIR = Path(__file__).parent.parent
 OUTPUT_DIR = BASE_DIR / "output"
 TEST_DIR = OUTPUT_DIR / "test-output"
 

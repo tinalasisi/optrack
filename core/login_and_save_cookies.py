@@ -10,7 +10,7 @@ from pathlib import Path
 from selenium import webdriver
 import argparse
 
-COOKIE_PATH = Path("cookies.pkl")
+COOKIE_PATH = Path("data/cookies.pkl")
 
 DEFAULT_URL = "https://umich.infoready4.com"   # first U‑M InfoReady host
 

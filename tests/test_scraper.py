@@ -15,7 +15,7 @@ import json
 import shutil
 
 # Test directory setup
-BASE_DIR = Path(__file__).parent
+BASE_DIR = Path(__file__).parent.parent
 OUTPUT_DIR = BASE_DIR / "output"
 TEST_DIR = OUTPUT_DIR / "test-output"
 
@@ -59,7 +59,7 @@ def test_scraper(args):
     # Run the scraper
     scrape_cmd = [
         sys.executable, 
-        str(BASE_DIR / "scrape_grants.py"),
+        str(BASE_DIR / "utils/scrape_grants.py"),
         "--base", base_url,
         "--max-items", str(items),
         "--suffix", suffix,
@@ -83,7 +83,7 @@ def test_scraper(args):
     # Run the improved converter
     convert_cmd = [
         sys.executable,
-        str(BASE_DIR / "improved_json_to_csv.py"),
+        str(BASE_DIR / "utils/json_converter.py"),
         str(json_file),
         "--output-dir", str(TEST_DIR)
     ]
