@@ -7,10 +7,7 @@ Pass --url to choose the starting site.
 
 import pickle
 from pathlib import Path
-
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 import argparse
 
 COOKIE_PATH = Path("cookies.pkl")
@@ -29,13 +26,18 @@ def main() -> None:
     args = parser.parse_args()
     target_url = args.url
 
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+    driver = webdriver.Chrome()  # Selenium Manager auto‑downloads the driver
     driver.get(target_url)
 
-    input(
-        "\n🛂  Finish Weblogin + Duo in the Chrome window.\n"
-        "When the protected page loads, return here and press <Enter>…"
-    )
+    # Use a more robust approach that won't fail in non-interactive environments
+    print("\n🛂  Finish Weblogin + Duo in the Chrome window.")
+    print("When the protected page loads, return here and press <Enter>…")
+    
+    try:
+        input()  # Wait for user to press Enter
+    except (EOFError, KeyboardInterrupt):
+        print("\nInput interrupted. Continuing anyway after 10 seconds...")
+        time.sleep(10)
 
     with COOKIE_PATH.open("wb") as fh:
         pickle.dump(driver.get_cookies(), fh)

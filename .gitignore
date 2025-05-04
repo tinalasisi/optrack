@@ -8,6 +8,15 @@ __pycache__/
 *.pyc
 *.pkl
 
+# -----------------------
+# Project-specific
+# -----------------------
+# Output directories and data files
+output/
+output/test-output/
+scraped_data_*.json
+scraped_data_*.csv
+
 # Virtual environments
 venv/
 env/
@@ -68,3 +77,4 @@ coverage.xml
 Thumbs.db
 ehthumbs.db
 Icon?
+**/.claude/settings.local.json
