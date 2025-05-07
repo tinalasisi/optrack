@@ -48,12 +48,12 @@ crontab -l > "$TEMP_CRONTAB" 2>/dev/null
 
 # Add the new cron job
 echo "# optrack - Opportunity Tracker" >> "$TEMP_CRONTAB"
-echo "$CRON_EXPR $REPO_PATH/scripts/optrack_incremental.sh" >> "$TEMP_CRONTAB"
+echo "$CRON_EXPR $REPO_PATH/scripts/run_on_autoupdates.sh" >> "$TEMP_CRONTAB"
 
 # Show preview
 echo ""
 echo "===== Preview of crontab entry ====="
-echo "$CRON_EXPR $REPO_PATH/scripts/optrack_incremental.sh"
+echo "$CRON_EXPR $REPO_PATH/scripts/run_on_autoupdates.sh"
 echo ""
 
 # Confirm installation

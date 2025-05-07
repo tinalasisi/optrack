@@ -382,22 +382,24 @@ This provides a clear history of when new grants were found. No commits are made
 
 ##### Branch Management
 
-The system can automatically push changes to a separate "auto-updates" branch for review:
+OpTrack provides a special script to run operations directly on a separate branch for automated updates:
 
 ```bash
-# Test the branch management system
-bash scripts/test_branch_system.sh
-
-# Push existing commits to the auto-updates branch
-bash scripts/push_to_updates_branch.sh
+# Run incremental update directly on auto-updates branch
+bash scripts/run_on_autoupdates.sh
 ```
 
 This workflow:
-1. Automatically commits changes to the local Git repository
-2. Pushes those changes to a separate "auto-updates" branch
-3. Keeps the main branch untouched until you're ready to merge
+1. Switches to the "auto-updates" branch
+2. Runs the incremental scan
+3. Commits any changes directly to this branch
+4. Pushes changes to the remote if available
+5. Returns to your original branch
+6. Keeps your main branch completely untouched
 
-You can then review the changes on the "auto-updates" branch before merging them into your main branch. This is especially useful for automated systems that might make changes while you're away.
+You can then review the changes on the "auto-updates" branch before merging them to your main branch. This approach ensures that automated updates never affect your main working branch, making it ideal for scheduled automation.
+
+> **Note**: For automated scheduling, you should schedule the `run_on_autoupdates.sh` script rather than the standard incremental script.
 
 #### Logging
 

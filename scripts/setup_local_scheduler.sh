@@ -46,7 +46,7 @@ case $choice in
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>${REPO_PATH}/scripts/optrack_incremental.sh</string>
+        <string>${REPO_PATH}/scripts/run_on_autoupdates.sh</string>
     </array>
     <key>StartCalendarInterval</key>
     <dict>
@@ -81,7 +81,7 @@ EOF
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>${REPO_PATH}/scripts/optrack_incremental.sh</string>
+        <string>${REPO_PATH}/scripts/run_on_autoupdates.sh</string>
     </array>
     <key>StartCalendarInterval</key>
     <array>
@@ -124,7 +124,7 @@ EOF
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>${REPO_PATH}/scripts/optrack_incremental.sh</string>
+        <string>${REPO_PATH}/scripts/run_on_autoupdates.sh</string>
     </array>
     <key>StartCalendarInterval</key>
     <dict>
@@ -159,7 +159,7 @@ EOF
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>${REPO_PATH}/scripts/optrack_incremental.sh</string>
+        <string>${REPO_PATH}/scripts/run_on_autoupdates.sh</string>
     </array>
     <key>StartCalendarInterval</key>
     <dict>

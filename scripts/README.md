@@ -18,7 +18,7 @@ OpTrack uses several integrated scripts to provide a complete automation solutio
 
 3. **Utility Scripts**
    - `check_cookies.sh`: Validates cookie files and prompts for refresh when needed
-   - `push_to_updates_branch.sh`: Manages Git branch for automated updates
+   - `run_on_autoupdates.sh`: Runs the incremental script directly on the auto-updates branch
    - `test_branch_system.sh`: Tests the branch management functionality
 
 ## How Everything Works Together
@@ -61,10 +61,12 @@ The automation components form a cohesive system:
    - The commit includes all database changes and logs
    - If branch management is enabled, changes are pushed to the "auto-updates" branch
 
-4. **Branch Management** (Optional):
-   - The `push_to_updates_branch.sh` script:
+4. **Branch Management**:
+   - The `run_on_autoupdates.sh` script:
      - Creates the "auto-updates" branch if it doesn't exist
-     - Pushes committed changes to this branch
+     - Switches to this branch before running operations
+     - Runs the incremental script directly on this branch
+     - Pushes changes to remote if available
      - Returns to your original branch
      - Leaves main branch untouched until you're ready to review
 
@@ -73,7 +75,7 @@ The automation components form a cohesive system:
 - **Scheduler ↔ Processing Scripts**: The scheduler activates the processing script at configured intervals.
 - **Processing Scripts ↔ Cookie Check**: Processing scripts automatically check for valid cookies.
 - **Processing Scripts ↔ Git Commits**: When changes are detected, they are committed to the local repository.
-- **Git Commits ↔ Branch Manager**: New commits are pushed to the auto-updates branch for review.
+- **Git Integration**: All operations happen directly on the auto-updates branch when using the `run_on_autoupdates.sh` script, keeping your main branch clean.
 
 ## Automation Modes
 
@@ -99,10 +101,9 @@ OpTrack supports different automation approaches for different needs:
    - For personal computers: `setup_local_scheduler.sh` (macOS only)
    - For servers/always-on systems: `setup_cron.sh`
 
-2. Configure branch management (optional):
-   - Ensure `push_to_updates_branch.sh` is executable
-   - Test with `test_branch_system.sh`
-   - The processing scripts will automatically use branch management when available
+2. Configure branch management:
+   - Ensure `run_on_autoupdates.sh` is executable
+   - The scheduler is configured to run this script directly
 
 3. Run processing scripts manually first to verify:
    - `bash scripts/optrack_incremental.sh --test`
