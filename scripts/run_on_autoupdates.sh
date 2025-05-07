@@ -43,10 +43,20 @@ fi
 echo "🔄 Switching to '$UPDATES_BRANCH' branch"
 git checkout "$UPDATES_BRANCH"
 
-# Make sure auto-updates is up to date with origin if remote exists
+# Make sure auto-updates is up to date with origin and main
 if git remote -v | grep -q origin; then
   echo "📥 Updating auto-updates branch from remote"
   git pull origin "$UPDATES_BRANCH" 2>/dev/null || true
+  
+  echo "🔄 Merging changes from main branch"
+  # First update main branch
+  git fetch origin main
+  # Then merge changes from main into our branch
+  git merge origin/main --no-edit || {
+    echo "⚠️ Merge conflict detected. Aborting merge."
+    git merge --abort
+    echo "⚠️ Could not automatically merge changes from main."
+  }
 fi
 
 # Create a log entry at the beginning of the run
