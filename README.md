@@ -215,6 +215,8 @@ This clean format makes it easy to:
 
 All test operations use the isolated `/output/test/` directory to prevent affecting production data.
 
+#### Testing Individual Components
+
 ```bash
 # Run test with default settings (2 items)
 python tests/test_scraper.py
@@ -224,7 +226,56 @@ python tests/test_scraper.py --items 5 --base-url https://alt-source.edu
 
 # Test incremental scraping functionality
 python tests/test_incremental.py
+```
 
+#### Testing Shell Scripts
+
+Use the test_shell_scripts.py script to test both optrack_incremental.sh and optrack_full.sh scripts:
+
+```bash
+# Test both scripts on all websites
+python tests/test_shell_scripts.py --all
+
+# Test only the incremental script
+python tests/test_shell_scripts.py --incremental
+
+# Test only the full script
+python tests/test_shell_scripts.py --full
+
+# Test with a specific site
+python tests/test_shell_scripts.py --site umich
+
+# Get more detailed output
+python tests/test_shell_scripts.py --verbose
+
+# Just list current test files without running tests
+python tests/test_shell_scripts.py --list-files
+```
+
+#### Running Production Scripts
+
+To run the actual shell scripts in production mode:
+
+```bash
+# Run incremental update on all websites
+bash scripts/optrack_incremental.sh
+
+# Run full update on all websites
+bash scripts/optrack_full.sh
+
+# Run incremental update for a specific site
+bash scripts/optrack_incremental.sh --site umich
+
+# Run full update for a specific site
+bash scripts/optrack_full.sh --site umich
+
+# Limit the number of items processed
+bash scripts/optrack_incremental.sh --max-items 10
+```
+
+#### Managing Test Files
+
+```bash
 # List test files without deleting
 python tests/purge_tests.py --list-only
 

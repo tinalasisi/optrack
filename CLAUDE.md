@@ -8,8 +8,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Scrape**: `python utils/scrape_grants.py [--site SITE] [--max-items N] [--incremental] [--batch-size N]`
 - **Track IDs**: `python core/source_tracker.py [--list] [--source SITE] [--list-ids]` (source-specific ID tracking)
 - **Convert**: `python utils/json_converter.py [--site SITE] [--output-dir DIR]` (CSV conversion)
-- **Test**: `python tests/test_scraper.py [--items N] [--base-url URL]`
+
+### Testing Commands
+- **Test Components**: `python tests/test_scraper.py [--items N] [--base-url URL]`
+- **Test Shell Scripts**: `python tests/test_shell_scripts.py [--all|--incremental|--full] [--site SITE] [--verbose]`
+- **List Test Files**: `python tests/test_shell_scripts.py --list-files`
 - **Cleanup**: `python tests/purge_tests.py [--force] [--list-only]`
+
+### Production Shell Scripts
+- **Incremental Run**: `bash scripts/optrack_incremental.sh [--site SITE] [--max-items N]`
+- **Full Run**: `bash scripts/optrack_full.sh [--site SITE] [--max-items N]`
 
 ## Virtual Environment
 ⚠️ **IMPORTANT:** Always activate the virtual environment before running any scripts:
@@ -66,18 +74,40 @@ All Python commands should be run within the activated virtual environment. Neve
 - `utils/json_converter.py`: Converts JSON databases to properly formatted CSVs
   - Handles special characters and newlines correctly
   - Can convert site-specific databases directly with `--site` flag
+- `scripts/optrack_incremental.sh`: Runs incremental update on all or specific websites
+  - First does fast scan to identify new grants
+  - Then gets details for new grants only
+  - Preserves existing data
+- `scripts/optrack_full.sh`: Runs full update on all or specific websites
+  - Completely rebuilds the database (can overwrite existing data)
+  - Use with caution as it may replace existing data
 - `tests/test_scraper.py`: Runs tests in isolated directory with minimal side effects
+- `tests/test_shell_scripts.py`: Tests shell scripts with nice emoji-based output
 - `tests/purge_tests.py`: Safely cleans up test output
 
 ## Development Workflow
-1. Use `test_scraper.py` to validate changes without affecting main output
-2. Clean up with `purge_tests.py` when done testing
-3. Run `login_and_save_cookies.py` when cookies expire
-4. Use `scrape_grants.py` to update source-specific databases
-5. Use `json_converter.py` for final data preparation as CSV
+1. Use `test_scraper.py` to validate changes to scraper components
+2. Use `test_shell_scripts.py` to test shell script functionality with all websites
+3. Clean up with `purge_tests.py` when done testing
+4. Run `login_and_save_cookies.py` when cookies expire
+5. Use the shell scripts for production runs:
+   - `optrack_incremental.sh` for regular updates (preserves existing data)
+   - `optrack_full.sh` for complete rebuilds (overwrites existing data)
+6. Use `json_converter.py` for final data preparation as CSV if needed
 
 ## Cron Job Setup
-For automated scraping, use a two-step process:
+For automated scraping, use the shell scripts:
+
+```bash
+# Daily incremental update (fast scan + details for new grants only)
+0 9 * * * /path/to/optrack/scripts/optrack_incremental.sh
+
+# Or use the setup_cron.sh helper to configure a cron job:
+./scripts/setup_cron.sh
+```
+
+Alternatively, you can set up the process manually:
+
 ```bash
 # Daily quick scan (just check for new IDs, very fast)
 python utils/scrape_grants.py --site umich --fast-scan
