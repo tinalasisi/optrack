@@ -43,18 +43,95 @@ fi
 echo "🔄 Switching to '$UPDATES_BRANCH' branch"
 git checkout "$UPDATES_BRANCH"
 
-# Make sure auto-updates is up to date with origin if remote exists
+# Create a log directory path (but don't create the file yet)
+LOG_DIR="$REPO_ROOT/logs/scheduled_runs"
+MERGE_LOG_FILE="$LOG_DIR/merge_$(date +"%Y%m%d_%H%M%S").log"
+mkdir -p "$LOG_DIR"
+
+# Make sure auto-updates is up to date with origin and main
 if git remote -v | grep -q origin; then
   echo "📥 Updating auto-updates branch from remote"
   git pull origin "$UPDATES_BRANCH" 2>/dev/null || true
+  
+  echo "🔄 Syncing with main branch"
+  # First update main branch
+  git fetch origin main
+  
+  # Check if we need to merge (if auto-updates is behind main)
+  BEHIND_COMMITS=$(git rev-list --count "$UPDATES_BRANCH..origin/main")
+  
+  if [ "$BEHIND_COMMITS" -gt 0 ]; then
+    echo "ℹ️ Found $BEHIND_COMMITS new commit(s) in main to merge"
+    
+    # Create a temporary file to store merge status
+    MERGE_STATUS_FILE=$(mktemp)
+    
+    # Start a merge log
+    {
+      echo "==== OpTrack Main Branch Merge ===="
+      echo "Date: $(date +"%Y-%m-%d %H:%M:%S")"
+      echo "From: origin/main"
+      echo "To: $UPDATES_BRANCH"
+      echo "Number of commits to merge: $BEHIND_COMMITS"
+      echo ""
+    } > "$MERGE_LOG_FILE"
+    
+    # Try to merge - redirect output to both console and file
+    if git merge origin/main --no-edit > >(tee -a "$MERGE_LOG_FILE") 2>&1; then
+      echo "✅ Successfully merged changes from main"
+      
+      # Get summary of merged changes and add to log
+      {
+        echo "Merge succeeded"
+        echo ""
+        echo "=== Merged Changes Summary ==="
+        git log --oneline --graph --decorate=short --pretty=format:'%h %s (%ar)' HEAD~$BEHIND_COMMITS..HEAD
+        echo ""
+        echo "=== Files Changed ==="
+        git show --name-status --oneline HEAD~$BEHIND_COMMITS..HEAD
+      } >> "$MERGE_LOG_FILE"
+      
+      # Commit the merge success log
+      git add -f "$MERGE_LOG_FILE"
+      git commit -m "Record successful merge from main on $(date +"%Y-%m-%d")"
+    else
+      echo "⚠️ Merge conflict detected. Aborting merge."
+      git merge --abort
+      
+      # Log the merge failure details
+      echo "❌ Could not automatically merge changes from main. Manual intervention required."
+      echo "Details of conflicting files:"
+      cat "$MERGE_STATUS_FILE" | grep -E "CONFLICT|ERROR" || echo "No detailed conflict information available"
+      
+      # Add failure to log
+      {
+        echo ""
+        echo "=== ⚠️ Merge Failure ==="
+        echo "Failed to merge latest changes from main branch"
+        echo "Reason: Merge conflicts detected"
+        echo "Action: Manual resolution required"
+        
+        # Add details of conflicts
+        echo ""
+        echo "Conflict details:"
+        cat "$MERGE_STATUS_FILE" | grep -E "CONFLICT|ERROR" || echo "No detailed conflict information available"
+      } >> "$MERGE_LOG_FILE"
+      
+      # Commit the merge failure log
+      git add -f "$MERGE_LOG_FILE"
+      git commit -m "Record merge failure from main on $(date +"%Y-%m-%d")"
+    fi
+    
+    # Clean up temp file
+    rm -f "$MERGE_STATUS_FILE"
+  else
+    echo "✅ Auto-updates branch is already up-to-date with main"
+  fi
 fi
 
 # Create a log entry at the beginning of the run
-LOG_DIR="$REPO_ROOT/logs/scheduled_runs"
 LOG_FILE="$LOG_DIR/run_$(date +"%Y%m%d_%H%M%S").log"
 START_TIME=$(date +"%Y-%m-%d %H:%M:%S")
-
-mkdir -p "$LOG_DIR"
 
 # Prepare the log content with start time
 {
