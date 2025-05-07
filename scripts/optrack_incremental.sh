@@ -227,19 +227,9 @@ if [ "$TEST_MODE" = false ]; then
   if [ -x "$REPO_PATH/scripts/push_to_updates_branch.sh" ]; then
     echo "🔄 Running branch management system..."
     
-    # Check if we have any unpushed commits (including those from previous runs)
-    UNPUSHED_COMMITS=$(git log --branches --not --remotes --oneline | wc -l | tr -d '[:space:]')
-    
-    if [ "$UNPUSHED_COMMITS" -gt 0 ] || [ "$HAS_CHANGES" = true ]; then
-      "$REPO_PATH/scripts/push_to_updates_branch.sh"
-      echo "Ran branch management system" >> "$LOG_FILE"
-      if [ "$UNPUSHED_COMMITS" -gt 0 ]; then
-        echo "Pushed $UNPUSHED_COMMITS commit(s) to auto-updates branch" >> "$LOG_FILE"
-      fi
-    else
-      echo "Branch management: No unpushed commits found" >> "$LOG_FILE"
-      echo "ℹ️  Branch management: No unpushed commits to push"
-    fi
+    # Always run the branch management script, which will handle logs appropriately
+    "$REPO_PATH/scripts/push_to_updates_branch.sh"
+    echo "Ran branch management system" >> "$LOG_FILE"
   fi
 fi
 
