@@ -98,37 +98,38 @@ mkdir -p "$RUNS_DIR" "$MERGE_DIR"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 MERGE_LOG_FILE="$MERGE_DIR/merge_${TIMESTAMP}.log"
 
-# Make sure auto-updates is up to date with origin and main
+# Make sure auto-updates is up to date with origin and the source branch
 if git remote -v | grep -q origin; then
   echo "📥 Updating auto-updates branch from remote"
   git pull origin "$UPDATES_BRANCH" 2>/dev/null || true
   
-  echo "🔄 Syncing with main branch"
-  # First update main branch
-  git fetch origin main
+  # Use provided source branch for syncing
+  echo "🔄 Syncing with $SOURCE_BRANCH branch"
+  # First update the source branch
+  git fetch origin "$SOURCE_BRANCH"
   
-  # Check if we need to merge (if auto-updates is behind main)
-  BEHIND_COMMITS=$(git rev-list --count "$UPDATES_BRANCH..origin/main")
+  # Check if we need to merge (if auto-updates is behind the source branch)
+  BEHIND_COMMITS=$(git rev-list --count "$UPDATES_BRANCH..origin/$SOURCE_BRANCH")
   
   if [ "$BEHIND_COMMITS" -gt 0 ]; then
-    echo "ℹ️ Found $BEHIND_COMMITS new commit(s) in main to merge"
+    echo "ℹ️ Found $BEHIND_COMMITS new commit(s) in $SOURCE_BRANCH to merge"
     
     # Create a temporary file to store merge status
     MERGE_STATUS_FILE=$(mktemp)
     
     # Start a merge log
     {
-      echo "==== OpTrack Main Branch Merge ===="
+      echo "==== OpTrack Branch Merge ===="
       echo "Date: $(date +"%Y-%m-%d %H:%M:%S")"
-      echo "From: origin/main"
+      echo "From: origin/$SOURCE_BRANCH"
       echo "To: $UPDATES_BRANCH"
       echo "Number of commits to merge: $BEHIND_COMMITS"
       echo ""
     } > "$MERGE_LOG_FILE"
     
     # Try to merge - redirect output to both console and file
-    if git merge origin/main --no-edit > >(tee -a "$MERGE_LOG_FILE") 2>&1; then
-      echo "✅ Successfully merged changes from main"
+    if git merge origin/$SOURCE_BRANCH --no-edit > >(tee -a "$MERGE_LOG_FILE") 2>&1; then
+      echo "✅ Successfully merged changes from $SOURCE_BRANCH"
       
       # Get summary of merged changes and add to log
       {
@@ -143,13 +144,13 @@ if git remote -v | grep -q origin; then
       
       # Commit the merge success log
       git add -f "$MERGE_LOG_FILE"
-      git commit -m "Record successful merge from main on $(date +"%Y-%m-%d")"
+      git commit -m "Record successful merge from $SOURCE_BRANCH on $(date +"%Y-%m-%d")"
     else
       echo "⚠️ Merge conflict detected. Aborting merge."
       git merge --abort
       
       # Log the merge failure details
-      echo "❌ Could not automatically merge changes from main. Manual intervention required."
+      echo "❌ Could not automatically merge changes from $SOURCE_BRANCH. Manual intervention required."
       echo "Details of conflicting files:"
       cat "$MERGE_STATUS_FILE" | grep -E "CONFLICT|ERROR" || echo "No detailed conflict information available"
       
@@ -157,7 +158,7 @@ if git remote -v | grep -q origin; then
       {
         echo ""
         echo "=== ⚠️ Merge Failure ==="
-        echo "Failed to merge latest changes from main branch"
+        echo "Failed to merge latest changes from $SOURCE_BRANCH branch"
         echo "Reason: Merge conflicts detected"
         echo "Action: Manual resolution required"
         
@@ -169,13 +170,13 @@ if git remote -v | grep -q origin; then
       
       # Commit the merge failure log
       git add -f "$MERGE_LOG_FILE"
-      git commit -m "Record merge failure from main on $(date +"%Y-%m-%d")"
+      git commit -m "Record merge failure from $SOURCE_BRANCH on $(date +"%Y-%m-%d")"
     fi
     
     # Clean up temp file
     rm -f "$MERGE_STATUS_FILE"
   else
-    echo "✅ Auto-updates branch is already up-to-date with main"
+    echo "✅ Auto-updates branch is already up-to-date with $SOURCE_BRANCH"
   fi
 fi
 
