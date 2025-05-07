@@ -2,7 +2,7 @@
 """
 Utility to purge test files created by test_scraper.py.
 
-This script removes the test-output directory and all its contents.
+This script removes the output/test directory and all its contents.
 """
 import shutil
 import os
@@ -12,7 +12,8 @@ import argparse
 # Directory setup
 BASE_DIR = Path(__file__).parent.parent
 OUTPUT_DIR = BASE_DIR / "output"
-TEST_DIR = OUTPUT_DIR / "test-output"
+OUTPUT_DB_DIR = OUTPUT_DIR / "db"
+TEST_DIR = OUTPUT_DIR / "test"
 
 def purge_test_files(args):
     """Remove test files and directory."""

@@ -9,7 +9,9 @@ Flow:
 2. If that returns 404/403, fall back to Selenium, open
    #/FundingOpportunities?page=N, wait for React to render, parse HTML.
 
-Output: scraped_data_YYYYMMDD_HHMMSS[_suffix].json
+This script focuses on scraping and saving JSON data to source-specific databases.
+For CSV conversion, use utils/json_converter.py separately.
+For tracking seen IDs, this script uses core/source_tracker.py.
 """
 
 from __future__ import annotations
@@ -36,15 +38,60 @@ from selenium import webdriver
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.remote.webdriver import WebDriver
 
+# Import source tracking utilities
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent))
+from core.source_tracker import SeenIDsTracker, load_seen_ids, save_seen_ids
+
 POPUP_DISMISSED = False  # cache so we do not repeatedly search once handled
 
 # ------------------------------------------------------------------
 # Constants
 # ------------------------------------------------------------------
 COOKIE_PATH = Path("data/cookies.pkl")
-DEFAULT_BASE = "https://umich.infoready4.com"
+CONFIG_PATH = Path("data/websites.json")
+DEFAULT_BASE = "https://umich.infoready4.com"  # Fallback default
 HEADERS = {"User-Agent": "UMich Grant Scraper (contact: tlasisi@umich.edu)"}
 LISTING_PATH = "#homePage"   # known hash‑route for UM InfoReady listings
+
+def load_website_config():
+    """Load website configuration from JSON file."""
+    if not CONFIG_PATH.exists():
+        logger.warning(f"No configuration file found at {CONFIG_PATH}. Using default settings.")
+        return {
+            "websites": [{"name": "umich", "url": DEFAULT_BASE, "enabled": True}],
+            "defaults": {"max_items": None, "incremental": True, "output_dir": str(OUTPUT_DB_DIR)}
+        }
+    
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        
+        # Validate that required keys exist
+        if "websites" not in config or not isinstance(config["websites"], list):
+            logger.warning("Invalid config: 'websites' list not found in config. Using default.")
+            config["websites"] = [{"name": "umich", "url": DEFAULT_BASE, "enabled": True}]
+        
+        if "defaults" not in config or not isinstance(config["defaults"], dict):
+            logger.warning("Invalid config: 'defaults' not found in config. Using default.")
+            config["defaults"] = {"max_items": None, "incremental": True, "output_dir": str(OUTPUT_DB_DIR)}
+        
+        # Only use enabled websites
+        config["websites"] = [w for w in config["websites"] if w.get("enabled", True)]
+        
+        if not config["websites"]:
+            logger.warning("No enabled websites found in config. Using default.")
+            config["websites"] = [{"name": "umich", "url": DEFAULT_BASE, "enabled": True}]
+        
+        logger.info(f"Loaded {len(config['websites'])} websites from configuration")
+        return config
+    except Exception as e:
+        logger.error(f"Error loading website configuration: {e}")
+        return {
+            "websites": [{"name": "umich", "url": DEFAULT_BASE, "enabled": True}],
+            "defaults": {"max_items": None, "incremental": True, "output_dir": str(OUTPUT_DB_DIR)}
+        }
 
 # Setup logging
 logger = logging.getLogger("scrape_grants")
@@ -55,8 +102,23 @@ if not logger.handlers:
     console.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
     logger.addHandler(console)
 
-# History file for tracking seen IDs (used in incremental mode)
-HISTORY_FILE = Path("output") / "seen_competitions.json"
+# Base directory
+BASE_DIR = Path(__file__).parent.parent
+
+# Output directories
+OUTPUT_DB_DIR = BASE_DIR / "output/db"
+OUTPUT_TEST_DIR = BASE_DIR / "output/test"
+
+# Database file patterns
+DATABASE_PATTERN = "{site}_grants.json"
+CSV_PATTERN = "{site}_grants.csv"
+
+# History file patterns for tracking seen IDs (used in incremental mode)
+HISTORY_PATTERN = "{site}_seen_competitions.json"
+
+# History file paths
+DB_HISTORY_DIR = OUTPUT_DB_DIR
+TEST_HISTORY_DIR = OUTPUT_TEST_DIR
 
 # --- modal + key filtering config ---------------------------
 BLOCKED_KEY_PREFIXES = (
@@ -113,20 +175,32 @@ from selenium.webdriver.support import expected_conditions as EC
 def fetch_html_via_selenium(driver: webdriver.Chrome, url: str) -> str:
     """Navigate to *url* and return fully rendered HTML after the JS table appears."""
 
+    logger.info(f"Fetching URL with Selenium: {url}")
     driver.get(url)
+    
+    # Log current URL and title for debugging
+    logger.info(f"Current URL: {driver.current_url}")
+    logger.info(f"Page title: {driver.title}")
+    
     dismiss_any_modal(driver, timeout=3)
 
     # wait until the document is fully loaded, then for at least one listing anchor.
     try:
+        logger.info("Waiting for document to be ready...")
         WebDriverWait(driver, 8).until(
             lambda d: d.execute_script("return document.readyState") == "complete"
         )
+        logger.info("Document ready, waiting for listing anchors...")
         WebDriverWait(driver, 6).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "a[competitionid]"))
         )
+        logger.info("Found listing anchors on page")
     except TimeoutException:
         # Listing anchors did not appear in time. Keep whatever HTML we have.
-        print(f"⚠️  Timeout waiting for listing anchors on {url}")
+        logger.warning(f"⚠️  Timeout waiting for listing anchors on {url}")
+        # Check what elements are available on the page
+        body_text = driver.find_element(By.TAG_NAME, "body").text
+        logger.info(f"Page content sample: {body_text[:200]}...")
 
     time.sleep(0.15)  # small extra pause for layout
     return driver.page_source
@@ -246,36 +320,118 @@ def extract_long_description(dsoup: BeautifulSoup) -> str:
 
 
 # ------------------------------------------------------------------
+# Database management
+# ------------------------------------------------------------------
+class SiteDatabase:
+    """Manages site-specific grant databases."""
+    
+    def __init__(self, site_name: str, is_test: bool = False):
+        self.site_name = site_name
+        self.output_dir = OUTPUT_TEST_DIR if is_test else OUTPUT_DB_DIR
+        self.db_path = self.output_dir / DATABASE_PATTERN.format(site=site_name)
+        self.csv_path = self.output_dir / CSV_PATTERN.format(site=site_name)
+        self.grants: Dict[str, Dict[str, Any]] = {}
+        self.load()
+    
+    def load(self) -> None:
+        """Load the site-specific database from disk."""
+        if not self.db_path.exists():
+            logger.info(f"No existing database found at {self.db_path}")
+            self.grants = {}
+            return
+        
+        try:
+            with open(self.db_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                self.grants = data.get("grants", {})
+            logger.info(f"Loaded {len(self.grants)} grants from {self.site_name} database")
+        except Exception as e:
+            logger.error(f"Error loading database for {self.site_name}: {e}")
+            self.grants = {}
+    
+    def save(self) -> None:
+        """Save the database to disk."""
+        # Ensure the output directory exists
+        self.output_dir.mkdir(exist_ok=True, parents=True)
+        
+        data = {
+            "site": self.site_name,
+            "grants": self.grants,
+            "last_updated": datetime.now().isoformat(),
+            "count": len(self.grants)
+        }
+        
+        # Save JSON database
+        with open(self.db_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        
+        # Save CSV version with clean format
+        try:
+            self.save_csv()
+        except Exception as e:
+            logger.warning(f"Could not save CSV: {e}")
+        
+        logger.info(f"Saved {len(self.grants)} grants to {self.site_name} database")
+    
+    def save_csv(self) -> None:
+        """Save a clean CSV version of the database."""
+        import pandas as pd
+        
+        # Extract consistent fields, keep details as JSON
+        records = []
+        for grant_id, grant in self.grants.items():
+            # Collect all extra fields into a details object
+            details = {}
+            for k, v in grant.items():
+                if k not in ['title', 'url', 'id', 'site', 'description_full']:
+                    details[k] = v
+            
+            # Create a clean record with proper encoding to prevent CSV issues
+            record = {
+                'title': grant.get('title', '').replace('\n', ' '),
+                'url': grant.get('url', ''),
+                'id': grant.get('id', ''),
+                'site': self.site_name,
+                'description': grant.get('description_full', '').strip().replace('\n', ' '),
+                # JSON-encode with ensure_ascii to prevent encoding issues
+                'details_json': json.dumps(details, ensure_ascii=True)
+            }
+            records.append(record)
+        
+        # Create the CSV with proper quoting to handle embedded newlines and commas
+        import csv  # For CSV constants
+        df = pd.DataFrame(records)
+        df.to_csv(self.csv_path, index=False, quoting=csv.QUOTE_ALL, escapechar='\\', doublequote=False)
+        logger.info(f"Also saved CSV version to {self.csv_path}")
+    
+    def update_from_scrape(self, scraped_records: List[Dict[str, Any]]) -> None:
+        """Update the database with newly scraped records."""
+        new_count = 0
+        
+        for record in scraped_records:
+            competition_id = record.get("competition_id", "")
+            if not competition_id:
+                continue
+                
+            if competition_id not in self.grants:
+                # This is a new grant, add it
+                self.grants[competition_id] = record
+                new_count += 1
+            else:
+                # Update existing grant with any new information
+                self.grants[competition_id].update(record)
+        
+        if new_count > 0:
+            logger.info(f"Added {new_count} new grants to {self.site_name} database")
+            self.save()
+        else:
+            logger.info(f"No new grants added to {self.site_name} database")
+
+# ------------------------------------------------------------------
 # History management for incremental scraping
 # ------------------------------------------------------------------
-def load_seen_ids() -> Set[str]:
-    """Load previously seen competition IDs for incremental mode."""
-    # Create history directory if it doesn't exist
-    HISTORY_FILE.parent.mkdir(exist_ok=True, parents=True)
-    
-    if not HISTORY_FILE.exists():
-        logger.info(f"No history file found at {HISTORY_FILE}")
-        return set()
-    
-    try:
-        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return set(data.get("seen_ids", []))
-    except Exception as e:
-        logger.warning(f"Error loading history file: {e}")
-        return set()
-
-def save_seen_ids(seen_ids: Set[str]) -> None:
-    """Save seen competition IDs to history file."""
-    # Ensure output directory exists
-    HISTORY_FILE.parent.mkdir(exist_ok=True, parents=True)
-    
-    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump({
-            "seen_ids": list(seen_ids), 
-            "last_updated": datetime.now().isoformat(),
-            "count": len(seen_ids)
-        }, f, indent=2)
+# Note: SeenIDsTracker class has been moved to core/source_tracker.py
+# The load_seen_ids and save_seen_ids functions are now imported from there
 
 # ------------------------------------------------------------------
 # Core scraping
@@ -283,20 +439,29 @@ def save_seen_ids(seen_ids: Set[str]) -> None:
 def scan_for_new_ids(
     sess: requests.Session,
     base_url: str,
-    seen_ids: Set[str]
+    seen_ids: Set[str],
+    site_name: str = "default"
 ) -> Set[str]:
     """
     Quickly scan the main listing page for new competition IDs.
     
-    Returns a set of new competition IDs not previously seen.
+    Args:
+        sess: The requests session to use
+        base_url: The base URL of the site to scan
+        seen_ids: Set of already seen competition IDs for this site
+        site_name: The name of the site being scanned
+        
+    Returns:
+        A set of new competition IDs not previously seen
     """
-    driver = webdriver.Chrome()
+    logger.info(f"Initializing Selenium driver for scanning {site_name}")
+    driver = create_selenium_driver()
     new_ids = set()
     
     try:
         # Navigate to main listing
         url = f"{base_url}/{LISTING_PATH}"
-        logger.info(f"Fast-scanning listings at {url}")
+        logger.info(f"Fast-scanning listings at {url} for site '{site_name}'")
         driver.get(url)
         
         # Wait for the page to load
@@ -327,11 +492,11 @@ def scan_for_new_ids(
                 new_ids.add(comp_id)
                 all_ids[comp_id] = title
         
-        logger.info(f"Found {len(anchors)} listings total")
-        logger.info(f"Found {len(new_ids)} NEW listings")
+        logger.info(f"Found {len(anchors)} listings total for site '{site_name}'")
+        logger.info(f"Found {len(new_ids)} NEW listings for site '{site_name}'")
         
         if new_ids:
-            logger.info("New listings found:")
+            logger.info(f"New listings found for site '{site_name}':")
             for comp_id in new_ids:
                 logger.info(f"  - {comp_id}: {all_ids.get(comp_id, 'Unknown')}")
     
@@ -340,6 +505,23 @@ def scan_for_new_ids(
     
     return new_ids
 
+def create_selenium_driver() -> webdriver.Chrome:
+    """Create a properly configured Selenium driver with options for reliability."""
+    from selenium.webdriver.chrome.options import Options
+    
+    options = Options()
+    options.add_argument("--disable-gpu")  # Disable GPU acceleration
+    options.add_argument("--no-sandbox")  # Disable sandbox
+    options.add_argument("--disable-dev-shm-usage")  # Overcome limited resource problems
+    options.add_argument("--disable-extensions")  # Disable extensions
+    options.add_argument("--disable-popup-blocking")  # Allow popups
+    options.add_argument("--start-maximized")  # Start maximized
+    
+    # Create and return the driver
+    driver = webdriver.Chrome(options=options)
+    driver.set_page_load_timeout(30)  # Set page load timeout to 30 seconds
+    return driver
+
 def scrape_all(
     sess: requests.Session,
     base_url: str,
@@ -347,6 +529,10 @@ def scrape_all(
     incremental: bool = False,
     fast_scan: bool = False,
     seen_ids: Optional[Set[str]] = None,
+    site_name: str = "default",
+    batch_size: Optional[int] = None,
+    batch_index: int = 0,
+    timeout_per_grant: int = 12
 ) -> list[dict]:
     api = f"{base_url}/Search/GetFundingOpportunities"
     page = 1
@@ -354,11 +540,23 @@ def scrape_all(
     use_json = True
     driver: webdriver.Chrome | None = None
     
+    # Load database to check which IDs we already have details for
+    db = SiteDatabase(site_name=site_name, is_test=False)
+    db_ids = set(db.grants.keys())
+    logger.info(f"Loaded {len(db_ids)} existing grants in the database for site '{site_name}'")
+    
     # Handle incremental mode
     ids_seen_this_run = set()
     if incremental and seen_ids is None:
-        seen_ids = load_seen_ids()
-        logger.info(f"Incremental mode: loaded {len(seen_ids)} previously seen competition IDs")
+        seen_ids = load_seen_ids(source=site_name)
+        logger.info(f"Incremental mode: loaded {len(seen_ids)} previously seen competition IDs for site '{site_name}'")
+    
+    # Identify IDs that we've seen but don't have details for
+    missing_ids = set()
+    if incremental and seen_ids:
+        missing_ids = seen_ids - db_ids
+        if missing_ids:
+            logger.info(f"Found {len(missing_ids)} IDs that were seen before but are not in the database - will collect their details")
     
     try:
         while True:
@@ -368,7 +566,8 @@ def scrape_all(
                 if r.status_code in (403, 404):
                     logger.info("🙈  JSON endpoint unavailable, switching to Selenium …")
                     use_json = False
-                    driver = webdriver.Chrome()
+                    driver = create_selenium_driver()
+                    logger.info("Selenium driver initialized successfully")
                     continue
                 r.raise_for_status()
                 data = r.json()
@@ -376,11 +575,19 @@ def scrape_all(
                     break
                 # Process items with incremental filtering if needed
                 batch = []
-                for i in data:
-                    comp_id = str(i.get('Id', ''))
+                for idx, i in enumerate(data):
+                    # Skip entries based on batch index when using batch mode
+                    if batch_size and batch_index > 0:
+                        # Skip items from previous batches
+                        if idx < batch_index * batch_size:
+                            continue
                     
-                    # Skip if we've seen this ID before in incremental mode
-                    if incremental and seen_ids and comp_id in seen_ids:
+                    comp_id = str(i.get('Id', ''))
+                    logger.info(f"Processing competition ID: {comp_id}")
+                    
+                    # Skip if we've seen this ID before AND have its details in the database
+                    if incremental and seen_ids and comp_id in seen_ids and comp_id in db_ids:
+                        logger.info(f"Skipping {comp_id} - already in database")
                         continue
                     
                     # Record this ID as seen in this run
@@ -395,6 +602,12 @@ def scrape_all(
                         link=f"{base_url}/FundingOppDetails?Id={i['Id']}",
                         competition_id=comp_id,
                     ))
+                    
+                    # Stop if we've reached the batch size
+                    if batch_size and len(batch) >= batch_size:
+                        logger.info(f"Reached batch size limit of {batch_size}")
+                        break
+                        
             else:
                 # -----------------------------------------------------------
                 # Rendered listing page → find every anchor on the page
@@ -413,12 +626,21 @@ def scrape_all(
 
                 batch = []
                 combined_sel = ",".join(MAIN_DETAIL_SELECTORS)
-                for a in anchors:
+                
+                # Handle batching when using Selenium method
+                if batch_size and batch_index > 0:
+                    start_idx = batch_index * batch_size
+                    end_idx = start_idx + batch_size
+                    # Only process the current batch's worth of anchors
+                    anchors = anchors[start_idx:end_idx]
+                    logger.info(f"Processing batch {batch_index+1}: items {start_idx+1}-{end_idx}")
+                
+                for idx, a in enumerate(anchors):
                     # Extract competition ID early for filtering
                     comp_id = a.get("competitionid", "")
                     
-                    # Skip if we've seen this ID before in incremental mode
-                    if incremental and seen_ids and comp_id in seen_ids:
+                    # Skip if we've seen this ID before AND have its details in the database
+                    if incremental and seen_ids and comp_id in seen_ids and comp_id in db_ids:
                         continue
                     
                     # Record this ID as seen in this run
@@ -506,6 +728,11 @@ def scrape_all(
 
                     if max_items and len(records) >= max_items:
                         break
+                
+                    # Stop if we've reached the batch size
+                    if batch_size and len(batch) >= batch_size:
+                        logger.info(f"Reached batch size limit of {batch_size}")
+                        break
 
                     # 4) back to the listing
                     driver.back()
@@ -529,9 +756,21 @@ def scrape_all(
     # Update seen IDs if we're in incremental mode
     if incremental and seen_ids is not None and ids_seen_this_run:
         seen_ids.update(ids_seen_this_run)
-        save_seen_ids(seen_ids)
-        logger.info(f"Saved {len(ids_seen_this_run)} new competition IDs to history file")
-        logger.info(f"Total unique IDs tracked: {len(seen_ids)}")
+        # Use the correct output directory based on the database path
+        is_test = False  # Always use the database directory unless explicitly in test mode
+        save_seen_ids(seen_ids, is_test=is_test, source=site_name)
+        logger.info(f"Saved {len(ids_seen_this_run)} new competition IDs to history file for site '{site_name}'")
+        logger.info(f"Total unique IDs tracked for site '{site_name}': {len(seen_ids)}")
+    
+    # Save batch data immediately if using batch mode
+    if batch_size and records:
+        # Update database with this batch
+        db.update_from_scrape(records)
+        logger.info(f"Saved batch of {len(records)} grants to database for site '{site_name}'")
+        
+        # Give a batch summary
+        next_batch = batch_index + 1
+        logger.info(f"Completed batch {batch_index+1}. To continue, use --batch-index {next_batch}")
 
     return records
 
@@ -541,12 +780,19 @@ def scrape_all(
 # ------------------------------------------------------------------
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Scrape InfoReady portals and write a timestamped JSON *and* CSV."
+        description="Scrape InfoReady portals and update source-specific databases."
     )
     parser.add_argument(
         "--base",
         action="append",
-        help="Base URL of a portal (repeatable). Default is the UM instance.",
+        help="Base URL of a portal (repeatable). Overrides config file if specified.",
+    )
+    parser.add_argument(
+        "--site",
+        "--source",
+        dest="site",
+        default=None,
+        help="Site name to use for source-specific database",
     )
     parser.add_argument(
         "--max-pages",
@@ -563,17 +809,22 @@ def main() -> None:
     parser.add_argument(
         "--suffix",
         default="",
-        help="Optional suffix for the output filename (e.g. 'daily').",
+        help="Optional suffix for the output filename (used only with --export).",
     )
     parser.add_argument(
         "--output-dir",
-        default="output",
-        help="Directory to save output files (default: 'output')",
+        default=None,
+        help="Directory to save output files (default from config or 'output/db')",
     )
     parser.add_argument(
         "--no-csv", 
         action="store_true",
-        help="Skip auto-generating CSV (use improved_json_to_csv.py instead)",
+        help="Skip CSV generation when exporting (used only with --export)",
+    )
+    parser.add_argument(
+        "--export", 
+        action="store_true",
+        help="Export results to separate JSON/CSV files (source-specific databases are always updated)",
     )
     parser.add_argument(
         "--incremental",
@@ -588,12 +839,101 @@ def main() -> None:
     parser.add_argument(
         "--append",
         default=None,
-        help="Append new grants to this existing JSON file instead of creating a new one",
+        help="Append new grants to this existing JSON file instead of creating a new one (used only with --export)",
+    )
+    parser.add_argument(
+        "--use-config",
+        action="store_true",
+        help="Use only websites from the configuration file",
+    )
+    parser.add_argument(
+        "--website",
+        action="append",
+        help="Specific website name(s) from config to scrape (repeatable)",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=None,
+        help="Process grants in batches of this size (recommended: 5-10)"
+    )
+    parser.add_argument(
+        "--batch-index",
+        type=int,
+        default=0,
+        help="Start with this batch index (0-based, for resuming interrupted scrapes)"
     )
     args = parser.parse_args()
 
-    bases = args.base if args.base else [DEFAULT_BASE]
-    bases = list({clean_base(b) for b in bases})
+    # Load config file
+    config = load_website_config()
+    defaults = config.get("defaults", {})
+    
+    # Determine which websites to scrape
+    websites_to_scrape = []
+    
+    if args.site:
+        # If site name is provided, use it as primary identifier
+        site_name = args.site
+        # Try to find matching website in config
+        found = False
+        for site in config.get("websites", []):
+            if site.get("name") == site_name:
+                websites_to_scrape.append(site)
+                found = True
+                break
+                
+        if not found:
+            # If no matching site in config, create one with default URL
+            if args.base:
+                url = clean_base(args.base[0])
+            else:
+                url = DEFAULT_BASE
+                
+            websites_to_scrape.append({"name": site_name, "url": url})
+            logger.info(f"Created custom site '{site_name}' with URL {url}")
+                
+    elif args.base:
+        # If base URLs provided, use them instead of config
+        bases = list({clean_base(b) for b in args.base})
+        for base in bases:
+            # Try to find a matching website in config for the name
+            name = None
+            for w in config.get("websites", []):
+                if clean_base(w.get("url", "")) == base:
+                    name = w.get("name")
+                    break
+            websites_to_scrape.append({"name": name or "custom", "url": base})
+    elif args.website:
+        # If specific website names provided, filter to those
+        websites = config.get("websites", [])
+        for site_name in args.website:
+            for site in websites:
+                if site.get("name") == site_name:
+                    websites_to_scrape.append(site)
+                    break
+            else:
+                logger.warning(f"Website '{site_name}' not found in configuration")
+    else:
+        # Use all enabled websites from config
+        websites_to_scrape = config.get("websites", [])
+        
+    if not websites_to_scrape:
+        logger.warning("No websites to scrape specified. Using default.")
+        websites_to_scrape = [{"name": "umich", "url": DEFAULT_BASE}]
+    
+    # Log websites to be scraped
+    logger.info(f"Will scrape {len(websites_to_scrape)} websites:")
+    for site in websites_to_scrape:
+        logger.info(f"  - {site.get('name', 'unknown')}: {site.get('url')}")
+        
+    # Get settings from config if not specified in args
+    max_items = args.max_items if args.max_items is not None else defaults.get("max_items")
+    incremental = args.incremental  # Default is now non-incremental; explicit flag to enable
+    output_dir = args.output_dir or defaults.get("output_dir", "output/db")
+    
+    # Get list of base URLs
+    bases = [site.get("url") for site in websites_to_scrape]
 
     sess = load_session()
     
@@ -601,10 +941,15 @@ def main() -> None:
     seen_ids = None
     existing_data = []
     
-    if args.incremental or args.fast_scan:
-        # Load seen IDs for incremental or fast scan mode
-        seen_ids = load_seen_ids()
-        
+    # Determine if this is a test run
+    is_test_run = "test" in str(output_dir)
+    
+    # Global tracker for shared IDs from append mode
+    global_seen_ids = {}
+    
+    # Initialize existing data for append mode
+    existing_data = []
+    
     if args.append:
         # Load existing data for append mode
         append_path = Path(args.append)
@@ -614,12 +959,23 @@ def main() -> None:
                     existing_data = json.load(f)
                 logger.info(f"Loaded {len(existing_data)} existing records from {append_path}")
                 
-                # Extract IDs from existing data for deduplication
-                if (args.incremental or args.fast_scan) and seen_ids is not None:
+                # Group existing data by site and extract IDs for deduplication
+                if args.incremental or args.fast_scan:
+                    # Group by site
+                    site_grouped = {}
                     for r in existing_data:
-                        if "competition_id" in r:
-                            seen_ids.add(str(r["competition_id"]))
-                    logger.info(f"Updated seen IDs with {len(existing_data)} IDs from existing data")
+                        site = r.get("site", "default")
+                        if site not in site_grouped:
+                            site_grouped[site] = []
+                        site_grouped[site].append(r)
+                    
+                    # Extract IDs for each site
+                    for site, records in site_grouped.items():
+                        global_seen_ids[site] = set()
+                        for r in records:
+                            if "competition_id" in r:
+                                global_seen_ids[site].add(str(r["competition_id"]))
+                        logger.info(f"Extracted {len(global_seen_ids[site])} IDs for site '{site}' from existing data")
             except Exception as e:
                 logger.warning(f"Error loading existing data: {e}")
     
@@ -630,76 +986,179 @@ def main() -> None:
     for b in bases:
         logger.info(f"\n🔗  Processing {b}")
         
+        # Get site name for this URL
+        site_name = None
+        for site in websites_to_scrape:
+            if site.get("url") == b:
+                site_name = site.get("name")
+                break
+                
+        if not site_name:
+            # Fall back to a safe name derived from the URL
+            from urllib.parse import urlparse
+            parsed = urlparse(b)
+            site_name = parsed.netloc.split('.')[0]  # Just take the first part of the domain
+        
         if args.fast_scan:
             # Just scan for new IDs without fetching details
-            if seen_ids is not None:
-                new_ids = scan_for_new_ids(sess, b, seen_ids)
+            # Load site-specific seen IDs
+            site_seen_ids = load_seen_ids(is_test=is_test_run, source=site_name)
+            
+            # Add any IDs from existing data
+            if site_name in global_seen_ids:
+                site_seen_ids.update(global_seen_ids[site_name])
+            
+            new_ids = scan_for_new_ids(sess, b, site_seen_ids, site_name)
+            
+            # Update history
+            if new_ids:
+                site_seen_ids.update(new_ids)
+                save_seen_ids(site_seen_ids, is_test=is_test_run, source=site_name)
+                logger.info(f"Added {len(new_ids)} new IDs to tracking history for site '{site_name}'")
+                logger.info(f"Run without --fast-scan flag to fetch their details")
                 
-                # Update history
-                if new_ids:
-                    seen_ids.update(new_ids)
-                    save_seen_ids(seen_ids)
-                    logger.info(f"Added {len(new_ids)} new IDs to tracking history")
-                    logger.info(f"Run without --fast-scan flag to fetch their details")
-                    
-                # No rows to add since we're just scanning
-                continue
+            # No rows to add since we're just scanning
+            continue
+        
+        # Load site-specific seen IDs for regular scraping mode
+        site_seen_ids = None
+        if incremental:
+            site_seen_ids = load_seen_ids(is_test=is_test_run, source=site_name)
+            
+            # Add any IDs from existing data
+            if site_name in global_seen_ids:
+                site_seen_ids.update(global_seen_ids[site_name])
         
         # Regular scraping mode
         rows = scrape_all(
-            sess, b, args.max_items, 
-            incremental=args.incremental, 
+            sess, b, max_items, 
+            incremental=incremental, 
             fast_scan=args.fast_scan,
-            seen_ids=seen_ids
+            seen_ids=site_seen_ids,
+            site_name=site_name,
+            batch_size=args.batch_size,
+            batch_index=args.batch_index
         )
         
+        # Set the site name for all rows from this source
         for r in rows:
-            r["site"] = b
+            r["site"] = site_name
         
         new_count += len(rows)
         all_rows.extend(rows)
 
-    # Create output directory if it doesn't exist
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(exist_ok=True, parents=True)
+    # Determine if this is a test run
+    is_test = "test" in str(output_dir)
     
-    # Determine output file path
-    if args.append:
-        # Use the specified file for append mode
-        out_json = Path(args.append)
+    # Set output directory based on whether this is a test
+    if is_test:
+        output_path = OUTPUT_TEST_DIR  # Use the test directory constant
     else:
-        # Generate timestamped filename
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        parts = ["scraped_data", ts]
-        if args.suffix:
-            parts.append(args.suffix.replace(" ", "_"))
-        filename = "_".join(parts)
-        out_json = output_dir / f"{filename}.json"
+        output_path = OUTPUT_DB_DIR    # Use the database directory constant
     
-    # Only save if we have data
-    if all_rows:
+    # Create output directory if it doesn't exist
+    output_path.mkdir(exist_ok=True, parents=True)
+    
+    # Initialize the seen IDs tracker
+    seen_tracker = SeenIDsTracker(is_test=is_test)
+    
+    # Group rows by site
+    site_records = {}
+    for row in all_rows:
+        site = row.get('site', '')
+        if not site and len(websites_to_scrape) == 1:
+            # Use the website name if site isn't specified
+            site = websites_to_scrape[0].get('name', 'default')
+            row['site'] = site
+            
+        if not site:
+            # Skip rows without site information
+            continue
+            
+        if site not in site_records:
+            site_records[site] = []
+        site_records[site].append(row)
+    
+    # Update site-specific databases
+    for site, records in site_records.items():
+        # Initialize site database
+        db = SiteDatabase(site_name=site, is_test=is_test)
+        
+        # Update database from scraped records
+        db.update_from_scrape(records)
+        
+        # Update seen IDs for this site
+        competition_ids = {r.get('competition_id', '') for r in records if r.get('competition_id')}
+        if competition_ids:
+            seen_tracker.add_ids(site, competition_ids)
+    
+    # Save seen IDs
+    seen_tracker.save()
+    
+    # Export to separate files if requested
+    if args.export and all_rows:
+        # Determine output file path
+        if args.append:
+            # Use the specified file for append mode
+            out_json = Path(args.append)
+        else:
+            # Generate timestamped filename
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            parts = ["export", ts]
+            
+            # Add website names to the filename if multiple
+            if len(websites_to_scrape) == 1:
+                site_name = websites_to_scrape[0].get("name")
+                if site_name:
+                    parts.append(site_name)
+            elif len(websites_to_scrape) > 1:
+                parts.append("multi_site")
+                
+            if args.suffix:
+                parts.append(args.suffix.replace(" ", "_"))
+                
+            filename = "_".join(parts)
+            out_json = output_path / f"{filename}.json"
+        
         # Save JSON file
         with open(out_json, "w", encoding="utf-8") as f:
             json.dump(all_rows, f, ensure_ascii=False, indent=2)
+        logger.info(f"Exported {len(all_rows)} records to {out_json}")
         
-        # Auto-convert to CSV (unless --no-csv flag was used)
+        # Auto-convert to clean CSV (unless --no-csv flag was used)
         if not args.no_csv:
             out_csv = out_json.with_suffix(".csv")
-            df = pd.json_normalize(all_rows)
+            
+            # Extract consistent fields, keep details as JSON
+            records = []
+            for item in all_rows:
+                record = {
+                    'title': item.get('title', ''),
+                    'link': item.get('link', item.get('url', '')),
+                    'competition_id': item.get('competition_id', item.get('id', '')),
+                    'site': item.get('site', ''),
+                    'description': item.get('description_full', '').strip(),
+                    'details_json': json.dumps(item.get('details', {}))
+                }
+                records.append(record)
+            
+            # Create the clean CSV
+            df = pd.DataFrame(records)
             df.to_csv(out_csv, index=False)
-            logger.info(f"Additionally saved CSV → {out_csv}")
-        
-        if args.append and new_count > 0:
-            logger.info(f"\nAppended {new_count} new records to {out_json}")
-        else:
-            logger.info(f"\nSaved {len(all_rows)} records ({new_count} new) → {out_json}")
-        
-        # Suggestion for the improved CSV
-        if not args.no_csv:
-            logger.info(f"To create an improved CSV file, run:")
-            logger.info(f"python improved_json_to_csv.py {out_json}")
-    else:
-        logger.info("No data to save. Output file not created.")
+            logger.info(f"Also exported CSV → {out_csv}")
+    
+    # Summary message
+    logger.info("\n=== Scrape Summary ===")
+    logger.info(f"Sites processed: {len(site_records)}")
+    for site, records in site_records.items():
+        logger.info(f"  - {site}: {len(records)} records")
+    logger.info(f"Each site has its own database file and CSV in {output_path}")
+    
+    # List the database files
+    for site in site_records.keys():
+        db_path = output_path / DATABASE_PATTERN.format(site=site)
+        csv_path = output_path / CSV_PATTERN.format(site=site)
+        logger.info(f"  - {site}: {db_path} and {csv_path}")
         
     # Summary for cron jobs
     if args.incremental:
@@ -708,6 +1167,29 @@ def main() -> None:
         logger.info(f"New records: {new_count}")
         logger.info(f"Total records: {len(all_rows)}")
         logger.info(f"Unique IDs tracked: {len(seen_ids) if seen_ids else 0}")
+    
+    # Batch summary if applicable
+    if args.batch_size:
+        logger.info(f"\n=== Batch Processing Summary ===")
+        logger.info(f"Batch size: {args.batch_size}")
+        logger.info(f"Current batch index: {args.batch_index}")
+        logger.info(f"Next batch index: {args.batch_index + 1}")
+        
+        # Display command for next batch
+        next_cmd = f"python utils/scrape_grants.py"
+        if args.website:
+            for site in args.website:
+                next_cmd += f" --website {site}"
+        if args.max_items:
+            next_cmd += f" --max-items {args.max_items}"
+        if args.batch_size:
+            next_cmd += f" --batch-size {args.batch_size}"
+        next_cmd += f" --batch-index {args.batch_index + 1}"
+        if args.incremental:
+            next_cmd += " --incremental"
+        
+        logger.info(f"\nTo continue with next batch, run:")
+        logger.info(f"{next_cmd}")
 
 
 if __name__ == "__main__":
