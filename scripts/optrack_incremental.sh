@@ -38,6 +38,7 @@ done
 
 # Change to project root directory
 cd "$(dirname "$0")/.."
+REPO_PATH=$(pwd)
 
 # Activate virtual environment
 source venv/bin/activate
@@ -161,7 +162,62 @@ with open(f'{output_dir}/grant_summary.txt', 'w') as summary:
 "
 
 echo "==== OpTrack incremental scan completed at $(date) ====" >> $OUTPUT_DIR/scan_log.txt
+COMPLETION_TIME=$(date +"%Y-%m-%d %H:%M:%S")
 echo "Scan complete. See $OUTPUT_DIR/grant_summary.txt for results."
+
+# Create a log entry in the dedicated logs directory
+LOG_DIR="$REPO_PATH/logs/scheduled_runs"
+LOG_FILE="$LOG_DIR/run_$(date +"%Y%m%d_%H%M%S").log"
+mkdir -p "$LOG_DIR"
+
+# Prepare the log content
+{
+  echo "==== OpTrack Scheduled Run ===="
+  echo "Date: $COMPLETION_TIME"
+  echo "Mode: Incremental"
+  echo "Output Directory: $OUTPUT_DIR"
+  echo ""
+  echo "=== Sites Processed ==="
+  
+  # Get database statistics for the log
+  if [ -f "$OUTPUT_DIR/grant_summary.txt" ]; then
+    cat "$OUTPUT_DIR/grant_summary.txt" >> "$LOG_FILE"
+  fi
+  
+  echo ""
+  echo "=== New Grants Added ==="
+  # This will be populated by the git diff check below
+} > "$LOG_FILE"
+
+# Only perform Git operations if not in test mode
+if [ "$TEST_MODE" = false ]; then
+  # Check if there are any changes to commit
+  if git status --porcelain | grep -q "$OUTPUT_DIR"; then
+    # Determine which files changed
+    CHANGED_FILES=$(git status --porcelain | grep "$OUTPUT_DIR" | awk '{print $2}')
+    echo "$CHANGED_FILES" >> "$LOG_FILE"
+    
+    # Count new grants from the summary file
+    NEW_GRANTS_COUNT=0
+    if [ -f "$OUTPUT_DIR/grant_summary.txt" ]; then
+      # Extract the total count
+      NEW_GRANTS_COUNT=$(grep -o "[0-9]* grants" "$OUTPUT_DIR/grant_summary.txt" | awk '{s+=$1} END {print s}')
+    fi
+    
+    # Commit the changes
+    COMMIT_MSG="Auto-update: Found $NEW_GRANTS_COUNT new grants on $(date +"%Y-%m-%d")"
+    git add $OUTPUT_DIR
+    git add "$LOG_FILE"
+    git commit -m "$COMMIT_MSG"
+    
+    echo ""
+    echo "✅ Changes committed to Git: $COMMIT_MSG"
+    echo "Commit message: $COMMIT_MSG" >> "$LOG_FILE"
+  else
+    echo "No new grants found in this scan." >> "$LOG_FILE"
+    echo "ℹ️  No changes detected, nothing to commit."
+  fi
+fi
 
 # If in test mode, show cleanup command
 if [ "$TEST_MODE" = true ]; then
