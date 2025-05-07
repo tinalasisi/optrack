@@ -17,6 +17,10 @@ output/test-output/
 scraped_data_*.json
 scraped_data_*.csv
 
+# Logs directory (only tracked in auto-updates branch)
+/logs/
+/logs/scheduled_runs/
+
 # Virtual environments
 venv/
 env/
