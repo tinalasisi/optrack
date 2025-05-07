@@ -1027,7 +1027,7 @@ def main() -> None:
             if site_name in global_seen_ids:
                 site_seen_ids.update(global_seen_ids[site_name])
             
-            new_ids = scan_for_new_ids(sess, b, site_seen_ids, site_name, visible=args.visible)
+            new_ids = scan_for_new_ids(sess, b, site_seen_ids, site_name, visible=args.visible if hasattr(args, 'visible') else False)
             
             # Update history
             if new_ids:
@@ -1055,7 +1055,7 @@ def main() -> None:
             fast_scan=args.fast_scan,
             seen_ids=site_seen_ids,
             site_name=site_name,
-            visible=args.visible,
+            visible=args.visible if hasattr(args, 'visible') else False,
             batch_size=args.batch_size,
             batch_index=args.batch_index
         )

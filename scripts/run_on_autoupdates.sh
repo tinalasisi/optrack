@@ -121,6 +121,13 @@ if git remote -v | grep -q origin; then
   fi
 fi
 
+# Ensure log files are committed before switching branch
+if [[ -n $(git status --porcelain -- "$LOG_DIR") ]]; then
+  echo "📝 Committing any outstanding log files"
+  git add "$LOG_DIR"
+  git commit -m "Complete logs for OpTrack scan on $(date +"%Y-%m-%d")"
+fi
+
 # Return to original branch
 echo "🔙 Returning to '$ORIGINAL_BRANCH' branch"
 git checkout "$ORIGINAL_BRANCH"
@@ -128,7 +135,7 @@ git checkout "$ORIGINAL_BRANCH"
 # Apply stashed changes if we stashed them
 if [ "$STASHED" = true ]; then
   echo "🔄 Applying stashed changes"
-  git stash pop
+  git stash pop || echo "⚠️ Warning: Could not apply stashed changes, they remain in the stash"
 fi
 
 echo "✅ OpTrack scan completed on '$UPDATES_BRANCH' branch"
