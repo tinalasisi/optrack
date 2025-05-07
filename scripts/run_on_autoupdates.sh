@@ -68,8 +68,8 @@ mkdir -p "$LOG_DIR"
   echo ""
 } > "$LOG_FILE"
 
-# Add the log file to git
-git add "$LOG_FILE"
+# Add the log file to git (force add since it might be in .gitignore)
+git add -f "$LOG_FILE"
 git commit -m "Start OpTrack scan on $(date +"%Y-%m-%d")"
 
 # Run the incremental script directly on auto-updates branch
@@ -104,8 +104,8 @@ END_TIME=$(date +"%Y-%m-%d %H:%M:%S")
   echo "Total Duration: $(printf "%02d:%02d:%02d" $HOURS $MINUTES $SECONDS) (HH:MM:SS)"
 } >> "$LOG_FILE"
 
-# Commit the updated log
-git add "$LOG_FILE"
+# Commit the updated log (force add since it might be in .gitignore)
+git add -f "$LOG_FILE"
 git commit -m "Complete OpTrack scan on $(date +"%Y-%m-%d")"
 
 # Push changes if remote exists and there are unpushed commits
@@ -124,7 +124,7 @@ fi
 # Ensure log files are committed before switching branch
 if [[ -n $(git status --porcelain -- "$LOG_DIR") ]]; then
   echo "📝 Committing any outstanding log files"
-  git add "$LOG_DIR"
+  git add -f "$LOG_DIR"
   git commit -m "Complete logs for OpTrack scan on $(date +"%Y-%m-%d")"
 fi
 
