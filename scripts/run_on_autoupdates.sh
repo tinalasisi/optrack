@@ -43,10 +43,15 @@ fi
 echo "🔄 Switching to '$UPDATES_BRANCH' branch"
 git checkout "$UPDATES_BRANCH"
 
-# Create a log directory path (but don't create the file yet)
-LOG_DIR="$REPO_ROOT/logs/scheduled_runs"
-MERGE_LOG_FILE="$LOG_DIR/merge_$(date +"%Y%m%d_%H%M%S").log"
-mkdir -p "$LOG_DIR"
+# Create branch-specific log directories to prevent merge conflicts
+LOG_BASE_DIR="$REPO_ROOT/logs"
+RUNS_DIR="$LOG_BASE_DIR/scheduled_runs/$UPDATES_BRANCH"
+MERGE_DIR="$LOG_BASE_DIR/merge_logs/$UPDATES_BRANCH"
+mkdir -p "$RUNS_DIR" "$MERGE_DIR"
+
+# Timestamp for log files
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+MERGE_LOG_FILE="$MERGE_DIR/merge_${TIMESTAMP}.log"
 
 # Make sure auto-updates is up to date with origin and main
 if git remote -v | grep -q origin; then
@@ -129,8 +134,8 @@ if git remote -v | grep -q origin; then
   fi
 fi
 
-# Create a log entry at the beginning of the run
-LOG_FILE="$LOG_DIR/run_$(date +"%Y%m%d_%H%M%S").log"
+# Create a log entry at the beginning of the run - use branch-specific log directory to prevent merge conflicts
+LOG_FILE="$RUNS_DIR/run_${TIMESTAMP}.log"
 START_TIME=$(date +"%Y-%m-%d %H:%M:%S")
 
 # Prepare the log content with start time
@@ -199,9 +204,9 @@ if git remote -v | grep -q origin; then
 fi
 
 # Ensure log files are committed before switching branch
-if [[ -n $(git status --porcelain -- "$LOG_DIR") ]]; then
+if [[ -n $(git status --porcelain -- "$RUNS_DIR") ]]; then
   echo "📝 Committing any outstanding log files"
-  git add -f "$LOG_DIR"
+  git add -f "$RUNS_DIR"
   git commit -m "Complete logs for OpTrack scan on $(date +"%Y-%m-%d")"
 fi
 
