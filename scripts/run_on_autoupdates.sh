@@ -3,14 +3,51 @@
 # 
 # This script runs the OpTrack incremental scan directly on the auto-updates branch.
 # It handles all branch management in a single script for simplicity:
-# 1. Switches to auto-updates branch
+# 1. Switches to auto-updates branch (creating it from main or specified branch if needed)
 # 2. Runs the incremental scan there
 # 3. Pushes changes to remote if available
 # 4. Returns to the original branch
 #
+# Usage: ./run_on_autoupdates.sh [--from BRANCH_NAME]
+#   --from BRANCH_NAME: Create auto-updates from specified branch instead of main
+#                      Use "current" to create from current branch
+#
 # This ensures all operations and logs remain only on the auto-updates branch.
 
 set -e  # Exit on error
+
+# Parse command line arguments
+SOURCE_BRANCH="main"  # Default source branch is main
+HELP=false
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --from)
+      SOURCE_BRANCH="$2"
+      shift 2
+      ;;
+    --help)
+      HELP=true
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1"
+      HELP=true
+      shift
+      ;;
+  esac
+done
+
+if [ "$HELP" = true ]; then
+  echo "Usage: $0 [--from BRANCH_NAME]"
+  echo ""
+  echo "Options:"
+  echo "  --from BRANCH_NAME    Create auto-updates from specified branch instead of main"
+  echo "                        (useful for testing branch-specific changes)"
+  echo "  --help                Show this help message"
+  echo ""
+  exit 0
+fi
 
 # Configuration
 UPDATES_BRANCH="auto-updates"
@@ -24,11 +61,17 @@ echo "✅ Running OpTrack on '$UPDATES_BRANCH' branch"
 
 # Check if auto-updates branch exists
 if ! git rev-parse --verify --quiet "$UPDATES_BRANCH" >/dev/null; then
-  echo "🌱 Creating new '$UPDATES_BRANCH' branch from main"
-  # Make sure we have the latest main branch
-  git fetch origin main
-  # Create branch based on main branch
-  git branch "$UPDATES_BRANCH" origin/main
+  # If SOURCE_BRANCH is "current", use the current branch
+  if [ "$SOURCE_BRANCH" = "current" ]; then
+    echo "🌱 Creating new '$UPDATES_BRANCH' branch from current branch ($ORIGINAL_BRANCH)"
+    git branch "$UPDATES_BRANCH"
+  else
+    echo "🌱 Creating new '$UPDATES_BRANCH' branch from '$SOURCE_BRANCH'"
+    # Make sure we have the latest source branch
+    git fetch origin "$SOURCE_BRANCH"
+    # Create branch based on the specified source branch
+    git branch "$UPDATES_BRANCH" "origin/$SOURCE_BRANCH"
+  fi
 else
   echo "✓ '$UPDATES_BRANCH' branch already exists"
 fi
@@ -55,37 +98,38 @@ mkdir -p "$RUNS_DIR" "$MERGE_DIR"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 MERGE_LOG_FILE="$MERGE_DIR/merge_${TIMESTAMP}.log"
 
-# Make sure auto-updates is up to date with origin and main
+# Make sure auto-updates is up to date with origin and the source branch
 if git remote -v | grep -q origin; then
   echo "📥 Updating auto-updates branch from remote"
   git pull origin "$UPDATES_BRANCH" 2>/dev/null || true
   
-  echo "🔄 Syncing with main branch"
-  # First update main branch
-  git fetch origin main
+  # Use provided source branch for syncing
+  echo "🔄 Syncing with $SOURCE_BRANCH branch"
+  # First update the source branch
+  git fetch origin "$SOURCE_BRANCH"
   
-  # Check if we need to merge (if auto-updates is behind main)
-  BEHIND_COMMITS=$(git rev-list --count "$UPDATES_BRANCH..origin/main")
+  # Check if we need to merge (if auto-updates is behind the source branch)
+  BEHIND_COMMITS=$(git rev-list --count "$UPDATES_BRANCH..origin/$SOURCE_BRANCH")
   
   if [ "$BEHIND_COMMITS" -gt 0 ]; then
-    echo "ℹ️ Found $BEHIND_COMMITS new commit(s) in main to merge"
+    echo "ℹ️ Found $BEHIND_COMMITS new commit(s) in $SOURCE_BRANCH to merge"
     
     # Create a temporary file to store merge status
     MERGE_STATUS_FILE=$(mktemp)
     
     # Start a merge log
     {
-      echo "==== OpTrack Main Branch Merge ===="
+      echo "==== OpTrack Branch Merge ===="
       echo "Date: $(date +"%Y-%m-%d %H:%M:%S")"
-      echo "From: origin/main"
+      echo "From: origin/$SOURCE_BRANCH"
       echo "To: $UPDATES_BRANCH"
       echo "Number of commits to merge: $BEHIND_COMMITS"
       echo ""
     } > "$MERGE_LOG_FILE"
     
     # Try to merge - redirect output to both console and file
-    if git merge origin/main --no-edit > >(tee -a "$MERGE_LOG_FILE") 2>&1; then
-      echo "✅ Successfully merged changes from main"
+    if git merge origin/$SOURCE_BRANCH --no-edit > >(tee -a "$MERGE_LOG_FILE") 2>&1; then
+      echo "✅ Successfully merged changes from $SOURCE_BRANCH"
       
       # Get summary of merged changes and add to log
       {
@@ -100,13 +144,13 @@ if git remote -v | grep -q origin; then
       
       # Commit the merge success log
       git add -f "$MERGE_LOG_FILE"
-      git commit -m "Record successful merge from main on $(date +"%Y-%m-%d")"
+      git commit -m "Record successful merge from $SOURCE_BRANCH on $(date +"%Y-%m-%d")"
     else
       echo "⚠️ Merge conflict detected. Aborting merge."
       git merge --abort
       
       # Log the merge failure details
-      echo "❌ Could not automatically merge changes from main. Manual intervention required."
+      echo "❌ Could not automatically merge changes from $SOURCE_BRANCH. Manual intervention required."
       echo "Details of conflicting files:"
       cat "$MERGE_STATUS_FILE" | grep -E "CONFLICT|ERROR" || echo "No detailed conflict information available"
       
@@ -114,7 +158,7 @@ if git remote -v | grep -q origin; then
       {
         echo ""
         echo "=== ⚠️ Merge Failure ==="
-        echo "Failed to merge latest changes from main branch"
+        echo "Failed to merge latest changes from $SOURCE_BRANCH branch"
         echo "Reason: Merge conflicts detected"
         echo "Action: Manual resolution required"
         
@@ -126,13 +170,13 @@ if git remote -v | grep -q origin; then
       
       # Commit the merge failure log
       git add -f "$MERGE_LOG_FILE"
-      git commit -m "Record merge failure from main on $(date +"%Y-%m-%d")"
+      git commit -m "Record merge failure from $SOURCE_BRANCH on $(date +"%Y-%m-%d")"
     fi
     
     # Clean up temp file
     rm -f "$MERGE_STATUS_FILE"
   else
-    echo "✅ Auto-updates branch is already up-to-date with main"
+    echo "✅ Auto-updates branch is already up-to-date with $SOURCE_BRANCH"
   fi
 fi
 
