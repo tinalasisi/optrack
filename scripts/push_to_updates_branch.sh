@@ -27,15 +27,30 @@ cd "$REPO_ROOT"
 
 log "🔍 Checking for new commits to push..."
 
+# First check if there are any local logs that need to be moved
+LOGS_EXIST=false
+if [ -f "$LOG_FILE" ]; then
+    LOGS_EXIST=true
+fi
+
 # Check if there are commits that haven't been pushed
 COMMITS_TO_PUSH=$(git log --branches --not --remotes --oneline | wc -l | tr -d '[:space:]')
 
-if [ "$COMMITS_TO_PUSH" -eq 0 ]; then
-    log "✅ No new commits to push. Exiting."
+# Check if there are differences between current branch and auto-updates branch
+# This ensures we also capture changes even if they've been pushed to origin
+if git rev-parse --verify --quiet "$UPDATES_BRANCH" >/dev/null; then
+    DIFF_WITH_UPDATES=$(git rev-list --count "$ORIGINAL_BRANCH..$UPDATES_BRANCH" "$UPDATES_BRANCH..$ORIGINAL_BRANCH" 2>/dev/null || echo "0")
+else
+    # If updates branch doesn't exist yet, we need to create it
+    DIFF_WITH_UPDATES=1
+fi
+
+if [ "$COMMITS_TO_PUSH" -eq 0 ] && [ "$DIFF_WITH_UPDATES" -eq 0 ] && [ "$LOGS_EXIST" = false ]; then
+    log "✅ No new commits to push and no logs to move. Exiting."
     exit 0
 fi
 
-log "📦 Found $COMMITS_TO_PUSH new commit(s) to push"
+log "📦 Processing updates: $COMMITS_TO_PUSH unpushed commits, $DIFF_WITH_UPDATES differences with updates branch"
 
 # Check if updates branch exists locally
 if ! git rev-parse --verify --quiet "$UPDATES_BRANCH" >/dev/null; then
