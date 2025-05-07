@@ -2,7 +2,7 @@
 """
 Test script for InfoReady scraper.
 
-Creates a dedicated test-output directory within output/ 
+Creates a dedicated output/test directory
 and runs a small test scrape to verify functionality.
 """
 import os

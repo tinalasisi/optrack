@@ -25,7 +25,7 @@ from datetime import datetime
 BASE_DIR = Path(__file__).parent.parent
 OUTPUT_DIR = BASE_DIR / "output"
 OUTPUT_DB_DIR = OUTPUT_DIR / "db"
-TEST_DIR = OUTPUT_DIR / "test-output"
+TEST_DIR = OUTPUT_DIR / "test"
 CONFIG_FILE = BASE_DIR / "data/websites.json"
 LOG_FILE = TEST_DIR / "test_scripts.log"
 

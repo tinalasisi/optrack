@@ -11,6 +11,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Test**: `python tests/test_scraper.py [--items N] [--base-url URL]`
 - **Cleanup**: `python tests/purge_tests.py [--force] [--list-only]`
 
+## Virtual Environment
+⚠️ **IMPORTANT:** Always activate the virtual environment before running any scripts:
+```bash
+source venv/bin/activate  # On macOS/Linux
+# or
+venv\Scripts\activate     # On Windows
+```
+
+All Python commands should be run within the activated virtual environment. Never use system Python directly.
+
 ## Architecture
 - **Source-specific databases**: Each source (e.g., umich, umms) has its own database and ID tracker
 - **Separated concerns**: Scraping, ID tracking, and CSV conversion are handled by separate scripts
