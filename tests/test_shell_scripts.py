@@ -300,7 +300,9 @@ def main():
     print_file_summary(files)
     
     # Show how to clean up
-    print(f"\n{INFO} To clean up test files, run: python tests/purge_tests.py --force")
+    print(f"\n{INFO} Clean up test files:")
+    print(f"    • Inside venv: python tests/purge_tests.py --force")
+    print(f"    • Outside venv: source venv/bin/activate && python tests/purge_tests.py --force")
 
 if __name__ == "__main__":
     main()
