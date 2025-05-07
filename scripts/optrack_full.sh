@@ -206,6 +206,13 @@ if [ "$TEST_MODE" = false ]; then
     echo ""
     echo "✅ Changes committed to Git: $COMMIT_MSG"
     echo "Commit message: $COMMIT_MSG" >> "$LOG_FILE"
+    
+    # Push changes to auto-updates branch if the script exists
+    if [ -x "$REPO_PATH/scripts/push_to_updates_branch.sh" ]; then
+      echo "🔄 Pushing changes to auto-updates branch..."
+      "$REPO_PATH/scripts/push_to_updates_branch.sh"
+      echo "Pushed changes to auto-updates branch" >> "$LOG_FILE"
+    fi
   else
     echo "No changes detected in the database." >> "$LOG_FILE"
     echo "ℹ️  No changes detected, nothing to commit."

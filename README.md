@@ -367,9 +367,11 @@ Cookies typically expire after 7-14 days. If cookies expire during a scheduled r
 2. It will log warnings about cookie expiration
 3. Next time you run the script interactively, it will prompt to refresh cookies
 
-#### Automated Git Commits
+#### Automated Git Integration
 
-The scripts automatically commit changes to Git when run in production mode (without the `--test` flag):
+The scripts automatically manage Git operations when run in production mode (without the `--test` flag):
+
+##### Automated Commits
 
 - **Incremental Script**: Commits with message "Auto-update: Found X new grants on YYYY-MM-DD"
 - **Full Script**: Commits with message "Full database rebuild: X grants on YYYY-MM-DD"
@@ -377,6 +379,25 @@ The scripts automatically commit changes to Git when run in production mode (wit
 This provides a clear history of when new grants were found. No commits are made when:
 - The script is run in test mode
 - No changes are detected in the database
+
+##### Branch Management
+
+The system can automatically push changes to a separate "auto-updates" branch for review:
+
+```bash
+# Test the branch management system
+bash scripts/test_branch_system.sh
+
+# Push existing commits to the auto-updates branch
+bash scripts/push_to_updates_branch.sh
+```
+
+This workflow:
+1. Automatically commits changes to the local Git repository
+2. Pushes those changes to a separate "auto-updates" branch
+3. Keeps the main branch untouched until you're ready to merge
+
+You can then review the changes on the "auto-updates" branch before merging them into your main branch. This is especially useful for automated systems that might make changes while you're away.
 
 #### Logging
 
