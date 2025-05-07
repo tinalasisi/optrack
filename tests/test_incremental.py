@@ -31,13 +31,19 @@ from selenium.common.exceptions import TimeoutException
 
 # Setup paths
 BASE_DIR = Path(__file__).parent.parent
-TEST_DIR = BASE_DIR / "output" / "test-incremental"
-COOKIES_PATH = BASE_DIR / "cookies.pkl"
+OUTPUT_DIR = BASE_DIR / "output"
+OUTPUT_DB_DIR = OUTPUT_DIR / "db"  
+TEST_DIR = OUTPUT_DIR / "test"
+COOKIES_PATH = BASE_DIR / "data/cookies.pkl"
 LOG_FILE = TEST_DIR / "test_incremental.log"
-HISTORY_FILE = TEST_DIR / "seen_competitions.json"
+
+# Source-specific history files
+DEFAULT_SITE = "umich"
+HISTORY_PATTERN = "{site}_seen_competitions.json"
 
 # Create test directories
 TEST_DIR.mkdir(exist_ok=True, parents=True)
+OUTPUT_DB_DIR.mkdir(exist_ok=True, parents=True)
 
 # Configure logging
 logging.basicConfig(
@@ -54,16 +60,17 @@ logger = logging.getLogger("test_incremental")
 DEFAULT_BASE = "https://umich.infoready4.com"
 LISTING_PATH = "#homePage"
 
-def setup_test_env():
+def setup_test_env(site=DEFAULT_SITE):
     """Create test directory and clean any old data."""
     # Create test directory
     TEST_DIR.mkdir(exist_ok=True, parents=True)
     
     # Clear history file if exists
-    if HISTORY_FILE.exists():
-        HISTORY_FILE.unlink()
+    history_file = TEST_DIR / HISTORY_PATTERN.format(site=site)
+    if history_file.exists():
+        history_file.unlink()
     
-    logger.info(f"Test environment set up in {TEST_DIR}")
+    logger.info(f"Test environment set up in {TEST_DIR} for site '{site}'")
     
 def load_cookies():
     """Load cookies from the standard location."""
@@ -213,22 +220,24 @@ def check_sorting_behavior(url):
     finally:
         driver.quit()
 
-def test_incremental_scraping(url, run_count=2):
+def test_incremental_scraping(url, run_count=2, site=DEFAULT_SITE):
     """Test incremental scraping by running the script multiple times."""
+    # Get the history file for this site
+    history_file = TEST_DIR / HISTORY_PATTERN.format(site=site)
+    
     for run in range(1, run_count + 1):
-        logger.info(f"\n=== Incremental Test Run {run}/{run_count} ===")
+        logger.info(f"\n=== Incremental Test Run {run}/{run_count} for site '{site}' ===")
         
         # Create a suffix for this run
         suffix = f"incr-test-{run}"
         
-        # Run the scraper with incremental mode
+        # Run the scraper with incremental mode and site-specific settings
         cmd = [
             sys.executable, 
             str(BASE_DIR / "utils/scrape_grants.py"),
             "--incremental",
-            "--depth=recent", 
-            "--max-items=3",
-            "--suffix", suffix,
+            "--max-items=5",
+            "--site", site,  # Add site parameter
             "--output-dir", str(TEST_DIR)
         ]
         
@@ -263,36 +272,36 @@ def test_incremental_scraping(url, run_count=2):
         if run == 1:
             logger.info("First run should have found some items")
             # Check if history file was created
-            if HISTORY_FILE.exists():
-                with open(HISTORY_FILE, "r") as f:
+            if history_file.exists():
+                with open(history_file, "r") as f:
                     history = json.load(f)
-                    logger.info(f"History file created with {len(history.get('seen_ids', []))} IDs")
+                    logger.info(f"History file created with {len(history.get('ids', []))} IDs for site '{site}'")
             else:
-                logger.warning("No history file was created!")
+                logger.warning(f"No history file was created for site '{site}'!")
         else:
             logger.info(f"Run {run} should find fewer or no new items")
             # Check if history file was updated
-            if HISTORY_FILE.exists():
-                with open(HISTORY_FILE, "r") as f:
+            if history_file.exists():
+                with open(history_file, "r") as f:
                     history = json.load(f)
-                    logger.info(f"History file now has {len(history.get('seen_ids', []))} IDs")
+                    logger.info(f"History file now has {len(history.get('ids', []))} IDs for site '{site}'")
             
         # Wait between runs to avoid rate limiting
         if run < run_count:
             time.sleep(2)
     
     # Final Summary
-    logger.info("\n=== Incremental Testing Summary ===")
-    if HISTORY_FILE.exists():
-        with open(HISTORY_FILE, "r") as f:
+    logger.info(f"\n=== Incremental Testing Summary for site '{site}' ===")
+    if history_file.exists():
+        with open(history_file, "r") as f:
             history = json.load(f)
-            logger.info(f"Final history contains {len(history.get('seen_ids', []))} unique competition IDs")
-            logger.info(f"IDs tracked: {', '.join(history.get('seen_ids', []))}")
+            logger.info(f"Final history contains {len(history.get('ids', []))} unique competition IDs")
+            logger.info(f"IDs tracked: {', '.join(map(str, history.get('ids', [])))}")
     
-    # List output files
-    output_files = list(TEST_DIR.glob("scraped_data_*"))
-    logger.info(f"Output files generated: {len(output_files)}")
-    for f in output_files:
+    # List output files - look for site-specific database files
+    db_files = list(TEST_DIR.glob(f"{site}_grants.*"))
+    logger.info(f"Site database files generated: {len(db_files)}")
+    for f in db_files:
         logger.info(f"  - {f.name}")
 
 def main():
@@ -301,6 +310,11 @@ def main():
         "--url", 
         default=DEFAULT_BASE,
         help=f"Base URL to test (default: {DEFAULT_BASE})"
+    )
+    parser.add_argument(
+        "--site",
+        default=DEFAULT_SITE,
+        help=f"Site name to test (default: {DEFAULT_SITE})"
     )
     parser.add_argument(
         "--sort-only",
@@ -320,8 +334,8 @@ def main():
     )
     args = parser.parse_args()
     
-    # Setup test environment
-    setup_test_env()
+    # Setup test environment for the specified site
+    setup_test_env(site=args.site)
     
     try:
         # Always check sorting behavior
@@ -329,9 +343,9 @@ def main():
         competitions = check_sorting_behavior(args.url)
         
         if not args.sort_only:
-            # Test incremental scraping
-            logger.info(f"Testing incremental scraping with {args.runs} runs")
-            test_incremental_scraping(args.url, args.runs)
+            # Test incremental scraping for the specified site
+            logger.info(f"Testing incremental scraping with {args.runs} runs for site '{args.site}'")
+            test_incremental_scraping(args.url, args.runs, site=args.site)
     
     except Exception as e:
         logger.error(f"Test failed with error: {e}", exc_info=True)

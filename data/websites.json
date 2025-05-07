@@ -1,0 +1,21 @@
+{
+  "websites": [
+    {
+      "name": "umich",
+      "url": "https://umich.infoready4.com",
+      "description": "University of Michigan InfoReady Portal",
+      "enabled": true
+    },
+    {
+      "name": "umms",
+      "url": "https://umms.infoready4.com",
+      "description": "University of Michigan Medical School InfoReady Portal",
+      "enabled": true
+    }
+  ],
+  "defaults": {
+    "max_items": null,
+    "incremental": true,
+    "output_dir": "output/db"
+  }
+}

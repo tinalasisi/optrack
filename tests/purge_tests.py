@@ -12,7 +12,8 @@ import argparse
 # Directory setup
 BASE_DIR = Path(__file__).parent.parent
 OUTPUT_DIR = BASE_DIR / "output"
-TEST_DIR = OUTPUT_DIR / "test-output"
+OUTPUT_DB_DIR = OUTPUT_DIR / "db"
+TEST_DIR = OUTPUT_DIR / "test"
 
 def purge_test_files(args):
     """Remove test files and directory."""

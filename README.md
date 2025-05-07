@@ -9,9 +9,10 @@ A comprehensive system for tracking funding opportunities from multiple sources,
 - **Incremental scraping** that only fetches new grants not already in the database.
 - **Configurable selectors** for any table or card‑based listing.
 - **Rate‑limited polite requests** and custom User‑Agent header to avoid overwhelming servers.
-- **Clean output organization** with JSON and multiple CSV formats for easy analysis.
+- **Clean output organization** with JSON and standardized CSV format for easy analysis.
 - **Automated monitoring** with shell scripts for scheduling through cron jobs.
 - **Testing infrastructure** for safe development and validation.
+- **Simplified directory structure** with separate `/output/db/` and `/output/test/` folders.
 
 ## Quick start
 
@@ -44,11 +45,15 @@ optrack/
 │   ├── test_incremental.py         # Test incremental functionality
 │   └── purge_tests.py              # Clean up test files
 ├── data/
-│   └── (for cookies and other data files)
+│   └── (for cookies and website configuration files)
 ├── output/
-│   ├── tracked_grants.json         # Main grant database
-│   ├── grant_summary.txt           # Database summary report
-│   └── scan_log.txt                # Scan operations log
+│   ├── db/                         # Main production database files
+│   │   ├── tracked_grants.json     # Main unified database
+│   │   ├── seen_competitions.json  # Tracking for incremental mode
+│   │   ├── grant_summary.txt       # Database summary report
+│   │   └── scan_log.txt            # Scan operations log
+│   └── test/                       # Test output directory
+│       └── (all test files isolated here)
 ├── README.md                       # Project documentation
 ├── requirements.txt                # Pinned dependencies
 └── CHANGELOG.md                    # Version history
@@ -89,6 +94,29 @@ The system currently tracks two InfoReady portals:
 - `umms`: UM Medical School InfoReady portal (https://umms.infoready4.com)
 
 Additional sources can be added by updating the scan_grants.sh script and following the same pattern.
+
+#### Directory Organization
+
+All files are organized in a simplified structure:
+
+- `/output/db/`: Contains all production database files, including:
+  - `{source}_grants.json`: Source-specific database files (e.g., `umich_grants.json`)
+  - `{source}_grants.csv`: CSV versions of each database with clean format
+  - `seen_competitions.json`: History file for incremental scraping
+  - `grant_summary.txt`: Summary report of the database contents
+  - `scan_log.txt`: Log of scanning operations
+  - Additional export files are only created when explicitly requested with `--export`
+
+- `/output/test/`: Isolated test environment, including:
+  - Separate test databases that won't affect production
+  - Test outputs from test scripts
+  - Automatically cleaned up with `purge_tests.py`
+
+This structure keeps your data neatly organized:
+1. **Source-Specific Databases**: Each source has its own JSON and CSV files
+2. **Clean Organization**: Permanent databases are clearly separated from temporary exports
+3. **Test Isolation**: All test files are kept separate from production data
+4. **Standard CSV Format**: All CSV files use the same standardized format with a `details_json` column
 
 #### Automation with scan_grants.sh
 
@@ -139,17 +167,53 @@ python utils/scrape_grants.py --no-csv
 python utils/scrape_grants.py --output-dir custom-output
 ```
 
-### Data Conversion
+### Data Management
+
+OpTrack maintains one database file and CSV per source, which are automatically updated when you run the scraper or tracker:
 
 ```bash
-# Convert JSON to clean CSV
-python utils/json_converter.py output/scraped_data_TIMESTAMP.json
+# Update the umich database
+python core/grant_tracker.py --fetch-details --source umich
 
-# Specify output file name
-python utils/json_converter.py output/scraped_data_TIMESTAMP.json -o output/custom-name.csv
+# Update the umms database 
+python core/grant_tracker.py --fetch-details --source umms
+
+# Update multiple source databases at once
+python utils/scrape_grants.py
 ```
 
+You can also export additional files when needed:
+
+```bash
+# Export new grants when running the tracker
+python core/grant_tracker.py --fetch-details --source umich --export
+
+# Export when running the scraper
+python utils/scrape_grants.py --export
+
+# Export from specific sources
+python core/export_grants.py --sources umich umms
+```
+
+#### CSV Format
+
+All CSV exports use a standardized format with the following columns:
+
+- `title`: Grant title
+- `link`: URL to the grant details
+- `competition_id`: Unique identifier from the source
+- `site`: Source identifier (e.g., "umich", "umms")
+- `description`: Full description text when available
+- `details_json`: JSON-encoded string containing all other details
+
+This clean format makes it easy to:
+1. Filter and sort grants across all sources
+2. Access the complete details in a structured format
+3. Import into data analysis tools or databases
+
 ### Testing
+
+All test operations use the isolated `/output/test/` directory to prevent affecting production data.
 
 ```bash
 # Run test with default settings (2 items)
@@ -157,6 +221,9 @@ python tests/test_scraper.py
 
 # Test with different parameters
 python tests/test_scraper.py --items 5 --base-url https://alt-source.edu
+
+# Test incremental scraping functionality
+python tests/test_incremental.py
 
 # List test files without deleting
 python tests/purge_tests.py --list-only
@@ -167,6 +234,8 @@ python tests/purge_tests.py
 # Force delete test files without confirmation
 python tests/purge_tests.py --force
 ```
+
+This isolated test environment ensures that test runs won't affect your production database or tracking history.
 
 ## Customizing for another site
 1. Edit CSS selectors in `utils/scrape_grants.py` to match the new portal.

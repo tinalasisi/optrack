@@ -17,7 +17,8 @@ import shutil
 # Test directory setup
 BASE_DIR = Path(__file__).parent.parent
 OUTPUT_DIR = BASE_DIR / "output"
-TEST_DIR = OUTPUT_DIR / "test-output"
+OUTPUT_DB_DIR = OUTPUT_DIR / "db"
+TEST_DIR = OUTPUT_DIR / "test"
 
 def ensure_directory(path: Path):
     """Create directory if it doesn't exist."""
@@ -53,70 +54,71 @@ def test_scraper(args):
     
     # Base URL and test parameters
     base_url = args.base_url
+    site_name = args.site
     items = args.items
-    suffix = f"test-{timestamp}"
     
-    # Run the scraper
+    # Run the scraper with site-specific settings
     scrape_cmd = [
         sys.executable, 
         str(BASE_DIR / "utils/scrape_grants.py"),
         "--base", base_url,
+        "--site", site_name,
         "--max-items", str(items),
-        "--suffix", suffix,
-        "--output-dir", str(TEST_DIR)
+        "--output-dir", str(TEST_DIR),
+        # Default is now non-incremental, so no need for a flag
     ]
     
-    print("\n🧪 Running test scrape...")
+    print(f"\n🧪 Running test scrape for site '{site_name}'...")
     run_command(scrape_cmd, "Scraper Output")
     
-    # Check for JSON file
-    json_pattern = f"scraped_data_*_{suffix}.json"
-    json_files = list(TEST_DIR.glob(json_pattern))
+    # Check for site-specific database file
+    db_pattern = f"{site_name}_grants.json"
+    db_file = TEST_DIR / db_pattern
     
-    if not json_files:
-        print("❌ Test failed! No JSON file was created.")
+    if not db_file.exists():
+        print(f"❌ Test failed! No site database file was created: {db_pattern}")
         return False
     
-    json_file = json_files[0]
-    print(f"✅ Found JSON file: {json_file.name}")
+    print(f"✅ Found site database file: {db_file.name}")
     
-    # Run the improved converter
-    convert_cmd = [
+    # Convert JSON to CSV using our enhanced converter
+    converter_cmd = [
         sys.executable,
         str(BASE_DIR / "utils/json_converter.py"),
-        str(json_file),
+        "--site", site_name,
         "--output-dir", str(TEST_DIR)
     ]
     
-    print("\n🧮 Running CSV converter...")
-    run_command(convert_cmd, "Converter Output")
+    print("\n🧮 Converting JSON to CSV...")
+    run_command(converter_cmd, "Converter Output")
     
-    # Check results
-    csv_pattern = f"scraped_data_*_{suffix}_clean.csv"
-    csv_files = list(TEST_DIR.glob(csv_pattern))
+    # Check for CSV file
+    csv_pattern = f"{site_name}_grants.csv"
+    csv_file = TEST_DIR / csv_pattern
     
-    if not csv_files:
-        print("❌ Test failed! No clean CSV file was created.")
+    if not csv_file.exists():
+        print(f"❌ Test failed! No CSV file was created: {csv_pattern}")
         return False
     
-    csv_file = csv_files[0]
     print(f"✅ Found CSV file: {csv_file.name}")
     
     # Print test summary
     print("\n📊 Test Summary:")
     print(f"  - Test time: {timestamp}")
+    print(f"  - Site: {site_name}")
     print(f"  - Records requested: {items}")
     
-    # Check JSON file content
+    # Check database file content
     try:
-        with open(json_file, 'r', encoding='utf-8') as f:
+        with open(db_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
-            print(f"  - Records scraped: {len(data)}")
+            grants = data.get('grants', {})
+            print(f"  - Records in database: {len(grants)}")
     except Exception as e:
-        print(f"  - Error reading JSON: {e}")
+        print(f"  - Error reading database: {e}")
     
     print(f"\nTest files are located in: {TEST_DIR}")
-    print("Run 'python purge_tests.py' to clean up test files when done.")
+    print("Run 'python tests/purge_tests.py' to clean up test files when done.")
     
     return True
 
@@ -129,10 +131,15 @@ def main():
         help="Base URL to scrape (default: https://umich.infoready4.com)"
     )
     parser.add_argument(
+        "--site", 
+        default="umich",
+        help="Site name to use for the test (default: umich)"
+    )
+    parser.add_argument(
         "--items", 
         type=int, 
-        default=2,
-        help="Number of items to scrape (default: 2)"
+        default=5,
+        help="Number of items to scrape (default: 5)"
     )
     args = parser.parse_args()
     
