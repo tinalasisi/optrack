@@ -109,6 +109,8 @@ for site in websites:
     if max_items_arg:
         scan_cmd.extend(max_items_arg.split())
         
+    # Always use headless mode for automated jobs
+        
     subprocess.run(scan_cmd)
     
     # Convert to CSV

@@ -440,7 +440,8 @@ def scan_for_new_ids(
     sess: requests.Session,
     base_url: str,
     seen_ids: Set[str],
-    site_name: str = "default"
+    site_name: str = "default",
+    visible: bool = False
 ) -> Set[str]:
     """
     Quickly scan the main listing page for new competition IDs.
@@ -455,7 +456,7 @@ def scan_for_new_ids(
         A set of new competition IDs not previously seen
     """
     logger.info(f"Initializing Selenium driver for scanning {site_name}")
-    driver = create_selenium_driver()
+    driver = create_selenium_driver(headless=not visible)
     new_ids = set()
     
     try:
@@ -505,8 +506,13 @@ def scan_for_new_ids(
     
     return new_ids
 
-def create_selenium_driver() -> webdriver.Chrome:
-    """Create a properly configured Selenium driver with options for reliability."""
+def create_selenium_driver(headless: bool = True) -> webdriver.Chrome:
+    """
+    Create a properly configured Selenium driver with options for reliability.
+    
+    Args:
+        headless: Whether to run in headless mode (default: True for scheduled jobs)
+    """
     from selenium.webdriver.chrome.options import Options
     
     options = Options()
@@ -515,7 +521,13 @@ def create_selenium_driver() -> webdriver.Chrome:
     options.add_argument("--disable-dev-shm-usage")  # Overcome limited resource problems
     options.add_argument("--disable-extensions")  # Disable extensions
     options.add_argument("--disable-popup-blocking")  # Allow popups
-    options.add_argument("--start-maximized")  # Start maximized
+    
+    if headless:
+        options.add_argument("--headless")  # Run in headless mode (no visible window)
+        logger.info("Running Chrome in headless mode")
+    else:
+        options.add_argument("--start-maximized")  # Start maximized (only when visible)
+        logger.info("Running Chrome in visible mode")
     
     # Create and return the driver
     driver = webdriver.Chrome(options=options)
@@ -532,7 +544,8 @@ def scrape_all(
     site_name: str = "default",
     batch_size: Optional[int] = None,
     batch_index: int = 0,
-    timeout_per_grant: int = 12
+    timeout_per_grant: int = 12,
+    visible: bool = False
 ) -> list[dict]:
     api = f"{base_url}/Search/GetFundingOpportunities"
     page = 1
@@ -566,7 +579,7 @@ def scrape_all(
                 if r.status_code in (403, 404):
                     logger.info("🙈  JSON endpoint unavailable, switching to Selenium …")
                     use_json = False
-                    driver = create_selenium_driver()
+                    driver = create_selenium_driver(headless=not args.visible)
                     logger.info("Selenium driver initialized successfully")
                     continue
                 r.raise_for_status()
@@ -863,6 +876,11 @@ def main() -> None:
         default=0,
         help="Start with this batch index (0-based, for resuming interrupted scrapes)"
     )
+    parser.add_argument(
+        "--visible",
+        action="store_true",
+        help="Run browser in visible mode (not headless) - useful for troubleshooting"
+    )
     args = parser.parse_args()
 
     # Load config file
@@ -1008,7 +1026,7 @@ def main() -> None:
             if site_name in global_seen_ids:
                 site_seen_ids.update(global_seen_ids[site_name])
             
-            new_ids = scan_for_new_ids(sess, b, site_seen_ids, site_name)
+            new_ids = scan_for_new_ids(sess, b, site_seen_ids, site_name, visible=args.visible)
             
             # Update history
             if new_ids:
@@ -1036,6 +1054,7 @@ def main() -> None:
             fast_scan=args.fast_scan,
             seen_ids=site_seen_ids,
             site_name=site_name,
+            visible=args.visible,
             batch_size=args.batch_size,
             batch_index=args.batch_index
         )

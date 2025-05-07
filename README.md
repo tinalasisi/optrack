@@ -336,6 +336,37 @@ The `--max-items` parameter limits how many grants to process:
 - **For debugging**: Use with small numbers to troubleshoot issues
 - **For rate limiting**: Use on very large sources to avoid overloading servers
 
+#### Headless vs. Visible Browser Mode
+
+By default, all scripts run with Chrome in headless mode (no visible browser window). This is ideal for:
+- Scheduled jobs
+- Server environments
+- Background processing
+
+If you need to see the browser for troubleshooting, you can use the `--visible` flag:
+
+```bash
+# Run with visible browser window
+python utils/scrape_grants.py --visible
+```
+
+#### Cookie Management
+
+Cookies are used to avoid interactive login for each run. To manage cookies:
+
+```bash
+# Check if cookies are valid and prompt to refresh if needed
+bash scripts/check_cookies.sh
+
+# Force refresh cookies (requires interactive login)
+python core/login_and_save_cookies.py
+```
+
+Cookies typically expire after 7-14 days. If cookies expire during a scheduled run:
+1. The script will automatically fall back to Selenium
+2. It will log warnings about cookie expiration
+3. Next time you run the script interactively, it will prompt to refresh cookies
+
 #### Automated Git Commits
 
 The scripts automatically commit changes to Git when run in production mode (without the `--test` flag):

@@ -108,6 +108,8 @@ for site in websites:
     if max_items_arg:
         fast_scan_cmd.extend(max_items_arg.split())
         
+    # Always use headless mode for automated jobs
+        
     subprocess.run(fast_scan_cmd)
     
     # Step 2: Get details for new grants incremental mode
