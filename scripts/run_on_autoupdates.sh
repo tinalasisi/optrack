@@ -24,9 +24,11 @@ echo "✅ Running OpTrack on '$UPDATES_BRANCH' branch"
 
 # Check if auto-updates branch exists
 if ! git rev-parse --verify --quiet "$UPDATES_BRANCH" >/dev/null; then
-  echo "🌱 Creating new '$UPDATES_BRANCH' branch"
-  # Create branch based on current branch
-  git branch "$UPDATES_BRANCH"
+  echo "🌱 Creating new '$UPDATES_BRANCH' branch from main"
+  # Make sure we have the latest main branch
+  git fetch origin main
+  # Create branch based on main branch
+  git branch "$UPDATES_BRANCH" origin/main
 else
   echo "✓ '$UPDATES_BRANCH' branch already exists"
 fi
