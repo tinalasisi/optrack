@@ -153,3 +153,10 @@ with open(f'{output_dir}/grant_summary.txt', 'w') as summary:
 
 echo "==== OpTrack full scan completed at $(date) ====" >> $OUTPUT_DIR/scan_log.txt
 echo "Scan complete. See $OUTPUT_DIR/grant_summary.txt for results."
+
+# If in test mode, show cleanup command
+if [ "$TEST_MODE" = true ]; then
+  echo -e "\nℹ️  Clean up test files:"
+  echo "    • Inside venv: python tests/purge_tests.py --force"
+  echo "    • Outside venv: source venv/bin/activate && python tests/purge_tests.py --force"
+fi

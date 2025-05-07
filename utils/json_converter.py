@@ -60,6 +60,15 @@ def clean_text_for_csv(text: str) -> str:
     # Replace newlines with spaces
     cleaned = text.replace('\n', ' ').replace('\r', ' ')
     
+    # Replace problematic characters for CSV
+    cleaned = cleaned.replace('"', '""')  # Double escape quotes for CSV
+    
+    # Handle other troublesome characters that might cause row breaks
+    cleaned = cleaned.replace('\u2028', ' ')  # Line separator
+    cleaned = cleaned.replace('\u2029', ' ')  # Paragraph separator
+    cleaned = cleaned.replace('\f', ' ')      # Form feed
+    cleaned = cleaned.replace('\v', ' ')      # Vertical tab
+    
     # Replace multiple spaces with a single space
     cleaned = ' '.join(cleaned.split())
     
@@ -93,8 +102,8 @@ def process_item(item: Dict[str, Any]) -> Dict[str, str]:
         'id': comp_id,
         'site': item.get('site', ''),
         'description': clean_text_for_csv(description),
-        # JSON-encode with ensure_ascii to prevent encoding issues
-        'details_json': json.dumps(details, ensure_ascii=True)
+        # JSON-encode with ensure_ascii and escape characters that might break CSV
+        'details_json': clean_text_for_csv(json.dumps(details, ensure_ascii=True))
     }
     
     return record
@@ -139,7 +148,8 @@ def convert_to_csv(
         quoting=csv.QUOTE_ALL,  # Quote all fields
         quotechar='"',          # Use double quotes
         doublequote=True,       # Escape quotes by doubling them
-        escapechar=None,        # No additional escape character
+        escapechar='\\',        # Use backslash as escape character
+        lineterminator='\n'     # Explicit line terminator
     )
     
     logger.info(f"✅ CSV written to {output_path}")
