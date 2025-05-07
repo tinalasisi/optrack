@@ -129,8 +129,15 @@ if git remote -v | grep -q origin; then
   fi
 fi
 
+<<<<<<< Updated upstream
 # Create a log entry at the beginning of the run
 LOG_FILE="$LOG_DIR/run_$(date +"%Y%m%d_%H%M%S").log"
+=======
+# Create a log entry at the beginning of the run - use branch-specific log directory to prevent merge conflicts
+LOG_DIR="$REPO_ROOT/logs/scheduled_runs/$UPDATES_BRANCH"
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+LOG_FILE="$LOG_DIR/run_${TIMESTAMP}.log"
+>>>>>>> Stashed changes
 START_TIME=$(date +"%Y-%m-%d %H:%M:%S")
 
 # Prepare the log content with start time
