@@ -33,7 +33,8 @@ fi
 
 CURRENT_TIME=$(date +%s)
 COOKIE_AGE=$(( (CURRENT_TIME - COOKIE_MTIME) / 86400 ))
-COOKIE_AGE_HOURS=$(( (CURRENT_TIME - COOKIE_MTIME) / 3600 ))
+# Calculate remainder hours after removing full days
+COOKIE_AGE_HOURS=$(( ((CURRENT_TIME - COOKIE_MTIME) % 86400) / 3600 ))
 
 if [ $COOKIE_AGE -ge 7 ]; then
   echo "⚠️  Cookie file is $COOKIE_AGE days old and may be expired."
