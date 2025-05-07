@@ -3,14 +3,51 @@
 # 
 # This script runs the OpTrack incremental scan directly on the auto-updates branch.
 # It handles all branch management in a single script for simplicity:
-# 1. Switches to auto-updates branch
+# 1. Switches to auto-updates branch (creating it from main or specified branch if needed)
 # 2. Runs the incremental scan there
 # 3. Pushes changes to remote if available
 # 4. Returns to the original branch
 #
+# Usage: ./run_on_autoupdates.sh [--from BRANCH_NAME]
+#   --from BRANCH_NAME: Create auto-updates from specified branch instead of main
+#                      Use "current" to create from current branch
+#
 # This ensures all operations and logs remain only on the auto-updates branch.
 
 set -e  # Exit on error
+
+# Parse command line arguments
+SOURCE_BRANCH="main"  # Default source branch is main
+HELP=false
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --from)
+      SOURCE_BRANCH="$2"
+      shift 2
+      ;;
+    --help)
+      HELP=true
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1"
+      HELP=true
+      shift
+      ;;
+  esac
+done
+
+if [ "$HELP" = true ]; then
+  echo "Usage: $0 [--from BRANCH_NAME]"
+  echo ""
+  echo "Options:"
+  echo "  --from BRANCH_NAME    Create auto-updates from specified branch instead of main"
+  echo "                        (useful for testing branch-specific changes)"
+  echo "  --help                Show this help message"
+  echo ""
+  exit 0
+fi
 
 # Configuration
 UPDATES_BRANCH="auto-updates"
@@ -24,9 +61,17 @@ echo "✅ Running OpTrack on '$UPDATES_BRANCH' branch"
 
 # Check if auto-updates branch exists
 if ! git rev-parse --verify --quiet "$UPDATES_BRANCH" >/dev/null; then
-  echo "🌱 Creating new '$UPDATES_BRANCH' branch"
-  # Create branch based on current branch
-  git branch "$UPDATES_BRANCH"
+  # If SOURCE_BRANCH is "current", use the current branch
+  if [ "$SOURCE_BRANCH" = "current" ]; then
+    echo "🌱 Creating new '$UPDATES_BRANCH' branch from current branch ($ORIGINAL_BRANCH)"
+    git branch "$UPDATES_BRANCH"
+  else
+    echo "🌱 Creating new '$UPDATES_BRANCH' branch from '$SOURCE_BRANCH'"
+    # Make sure we have the latest source branch
+    git fetch origin "$SOURCE_BRANCH"
+    # Create branch based on the specified source branch
+    git branch "$UPDATES_BRANCH" "origin/$SOURCE_BRANCH"
+  fi
 else
   echo "✓ '$UPDATES_BRANCH' branch already exists"
 fi
