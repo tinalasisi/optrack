@@ -61,12 +61,13 @@ The automation components form a cohesive system:
    - The commit includes all database changes and logs
    - If branch management is enabled, changes are pushed to the "auto-updates" branch
 
-4. **Branch Management** (Optional):
-   - The `push_to_updates_branch.sh` script:
-     - Creates the "auto-updates" branch if it doesn't exist
-     - Pushes committed changes to this branch
-     - Returns to your original branch
-     - Leaves main branch untouched until you're ready to review
+4. **Branch Management**:
+   - The main scripts (`optrack_incremental.sh` and `optrack_full.sh`):
+     - Automatically switch to the "auto-updates" branch when in production mode
+     - Run all operations directly on this branch
+     - Push changes to remote if available
+     - Return to your original branch when finished
+     - Keep your main branch completely untouched until you're ready to review
 
 ### Detailed Integration
 

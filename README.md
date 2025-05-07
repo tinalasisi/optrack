@@ -382,22 +382,26 @@ This provides a clear history of when new grants were found. No commits are made
 
 ##### Branch Management
 
-The system can automatically push changes to a separate "auto-updates" branch for review:
+The system always works directly on a separate "auto-updates" branch:
 
 ```bash
-# Test the branch management system
-bash scripts/test_branch_system.sh
+# When you run the incremental script
+bash scripts/optrack_incremental.sh
 
-# Push existing commits to the auto-updates branch
-bash scripts/push_to_updates_branch.sh
+# When you run the full script
+bash scripts/optrack_full.sh
 ```
 
 This workflow:
-1. Automatically commits changes to the local Git repository
-2. Pushes those changes to a separate "auto-updates" branch
-3. Keeps the main branch untouched until you're ready to merge
+1. Automatically switches to the "auto-updates" branch when running in production mode
+2. Performs all operations and commits directly on that branch
+3. Pushes those changes to the remote "auto-updates" branch if a remote exists
+4. Returns to your original branch when finished
+5. Keeps your main branch completely untouched 
 
-You can then review the changes on the "auto-updates" branch before merging them into your main branch. This is especially useful for automated systems that might make changes while you're away.
+You can then review the changes on the "auto-updates" branch and merge them into your main branch when you're ready. This approach ensures that automated updates never affect your main working branch, making it ideal for scheduled automation.
+
+> **Note**: In test mode (with the `--test` flag), the scripts run on your current branch without switching, so you can safely test without affecting any branches.
 
 #### Logging
 

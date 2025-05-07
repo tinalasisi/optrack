@@ -40,6 +40,34 @@ done
 cd "$(dirname "$0")/.."
 REPO_PATH=$(pwd)
 
+# Git branch management
+UPDATES_BRANCH="auto-updates"
+ORIGINAL_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+# If not in test mode, switch to auto-updates branch
+if [ "$TEST_MODE" = false ]; then
+  echo "✅ Using branch management for OpTrack incremental scan"
+  
+  # Check if auto-updates branch exists
+  if ! git rev-parse --verify --quiet "$UPDATES_BRANCH" >/dev/null; then
+    echo "🌱 Creating new '$UPDATES_BRANCH' branch"
+    # Create branch based on current branch
+    git branch "$UPDATES_BRANCH"
+  else
+    echo "✓ '$UPDATES_BRANCH' branch already exists"
+  fi
+
+  # Switch to auto-updates branch
+  echo "🔄 Switching to '$UPDATES_BRANCH' branch"
+  git checkout "$UPDATES_BRANCH"
+  
+  # Make sure auto-updates is up to date with origin if remote exists
+  if git remote -v | grep -q origin; then
+    echo "📥 Updating auto-updates branch from remote"
+    git pull origin "$UPDATES_BRANCH" || true
+  fi
+fi
+
 # Activate virtual environment
 source venv/bin/activate
 
@@ -238,4 +266,24 @@ if [ "$TEST_MODE" = true ]; then
   echo -e "\nℹ️  Clean up test files:"
   echo "    • Inside venv: python tests/purge_tests.py --force"
   echo "    • Outside venv: source venv/bin/activate && python tests/purge_tests.py --force"
+else
+  # Push changes to remote if not in test mode and remote exists
+  if git remote -v | grep -q origin; then
+    # Check if there are any unpushed commits
+    UNPUSHED_COMMITS=$(git log --branches --not --remotes --oneline | wc -l | tr -d '[:space:]')
+    
+    if [ "$UNPUSHED_COMMITS" -gt 0 ]; then
+      echo "⬆️ Pushing changes to remote '$UPDATES_BRANCH' branch"
+      git push -u origin "$UPDATES_BRANCH"
+    else
+      echo "📝 No new commits to push"
+    fi
+  fi
+  
+  # Return to original branch
+  echo "🔙 Returning to '$ORIGINAL_BRANCH' branch"
+  git checkout "$ORIGINAL_BRANCH"
+  
+  echo "✅ OpTrack incremental scan completed on '$UPDATES_BRANCH' branch"
+  echo "📝 Check the '$UPDATES_BRANCH' branch for updates"
 fi
