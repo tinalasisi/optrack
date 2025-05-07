@@ -5,6 +5,9 @@
 REPO_PATH=$(cd "$(dirname "$0")/.." && pwd)
 COOKIE_FILE="$REPO_PATH/data/cookies.pkl"
 
+# Activate virtual environment
+source "$REPO_PATH/venv/bin/activate"
+
 # Check if cookie file exists
 if [ ! -f "$COOKIE_FILE" ]; then
   echo "⚠️  Cookie file not found. You need to log in first."
@@ -19,9 +22,18 @@ if [ ! -f "$COOKIE_FILE" ]; then
   exit 0
 fi
 
-# Check cookie age
-COOKIE_AGE=$(( ($(date +%s) - $(stat -c %Y "$COOKIE_FILE")) / 86400 ))
-COOKIE_AGE_HOURS=$(( ($(date +%s) - $(stat -c %Y "$COOKIE_FILE")) / 3600 ))
+# Check cookie age (macOS compatible)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  # macOS
+  COOKIE_MTIME=$(stat -f %m "$COOKIE_FILE")
+else
+  # Linux
+  COOKIE_MTIME=$(stat -c %Y "$COOKIE_FILE")
+fi
+
+CURRENT_TIME=$(date +%s)
+COOKIE_AGE=$(( (CURRENT_TIME - COOKIE_MTIME) / 86400 ))
+COOKIE_AGE_HOURS=$(( (CURRENT_TIME - COOKIE_MTIME) / 3600 ))
 
 if [ $COOKIE_AGE -ge 7 ]; then
   echo "⚠️  Cookie file is $COOKIE_AGE days old and may be expired."
