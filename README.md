@@ -19,11 +19,12 @@ A comprehensive system for tracking funding opportunities from multiple sources,
 ```bash
 git clone https://github.com/tlasisi/optrack.git
 cd optrack
-python3 -m venv venv
+python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-python core/login_and_save_cookies.py                  # one‑time interactive login
-python core/grant_tracker.py --fetch-details --source umich  # initialize database
+python core/login_and_save_cookies.py                    # one‑time interactive login
+python utils/scrape_grants.py --site umich               # initialize database
+python utils/json_converter.py --site umich              # convert to CSV
 ```
 
 ## Directory layout
@@ -31,11 +32,12 @@ python core/grant_tracker.py --fetch-details --source umich  # initialize databa
 ```
 optrack/
 ├── core/
-│   ├── grant_tracker.py            # Multi-source grant tracking system
 │   ├── login_and_save_cookies.py   # Selenium login & cookie saver
-│   └── export_grants.py            # Database export tool
+│   └── source_tracker.py           # Source-specific ID tracking
 ├── scripts/
-│   ├── scan_grants.sh              # Multi-source automation script
+│   ├── optrack_full.sh             # Full database rebuild script
+│   ├── optrack_incremental.sh      # Incremental update script
+│   ├── run_on_autoupdates.sh       # Branch-specific automation
 │   └── setup_cron.sh               # Cron job setup helper
 ├── utils/
 │   ├── json_converter.py           # Convert JSON to clean CSV
@@ -48,8 +50,9 @@ optrack/
 │   └── (for cookies and website configuration files)
 ├── output/
 │   ├── db/                         # Main production database files
-│   │   ├── tracked_grants.json     # Main unified database
-│   │   ├── seen_competitions.json  # Tracking for incremental mode
+│   │   ├── {site}_grants.json      # Site-specific grant databases
+│   │   ├── {site}_grants.csv       # CSV export for each site
+│   │   ├── {site}_seen_competitions.json  # Site-specific ID tracking
 │   │   ├── grant_summary.txt       # Database summary report
 │   │   └── scan_log.txt            # Scan operations log
 │   └── test/                       # Test output directory
@@ -61,30 +64,31 @@ optrack/
 
 ## Advanced Usage
 
-### Grant Tracking System
+### Source Tracking and Scraping
 
-The repository includes a powerful multi-source, database-driven grant tracking system:
+The repository includes a source-specific tracking and scraping system:
 
 ```bash
 # Quick scan to identify new grants (fast)
-python core/grant_tracker.py --scan-only --source umich --base "https://umich.infoready4.com"
+python utils/scrape_grants.py --site umich --fast-scan
 
-# Scan and download details for new grants
-python core/grant_tracker.py --fetch-details --source umms --base "https://umms.infoready4.com"
+# Scan and download details for new grants (incremental mode)
+python utils/scrape_grants.py --site umms --incremental
 
-# List all grants in the database
-python core/grant_tracker.py --list
+# List tracked sources and IDs
+python core/source_tracker.py --list
+python core/source_tracker.py --list-ids --source umich
 
-# Show a database summary
-python core/grant_tracker.py --summary
+# Convert JSON to CSV
+python utils/json_converter.py --site umich
 ```
 
 #### How it works
 
-1. Maintains a unified database of all grants from all sources in `output/tracked_grants.json`
-2. Uses source-specific IDs to prevent duplicates even across sources with identical IDs
+1. Maintains source-specific databases in `output/db/{site}_grants.json`
+2. Uses source-specific ID tracking in `output/db/{site}_seen_competitions.json`
 3. Only downloads details for grants not already in the database
-4. Creates timestamped output files for new grants by source
+4. Creates standardized CSV exports of each database
 5. Tracks source information for each grant for better organization
 
 #### Multi-Source Support
@@ -152,69 +156,73 @@ The `setup_cron.sh` script creates a traditional cron job that:
 
 This approach is better for server environments where the system is always on and the job needs to run at precise times.
 
-#### Exporting Grant Data
+#### Converting and Exporting Grant Data
 
-Extract data from the database for analysis with `export_grants.py`:
+Convert JSON databases to CSV format for analysis with `json_converter.py`:
 
 ```bash
-# List available sources
-python core/export_grants.py --list-sources
+# Convert a specific site's database to CSV
+python utils/json_converter.py --site umich
 
-# Export grants from specific sources
-python core/export_grants.py --sources umich umms
+# Convert with custom output directory
+python utils/json_converter.py --site umich --output-dir custom-output
 
-# Export all grants to a single file
-python core/export_grants.py --all
+# Convert all site databases at once
+python utils/json_converter.py
 ```
 
 ### Direct Scraping Options
 
 ```bash
-# Basic usage
-python utils/scrape_grants.py
+# Basic usage with specific site
+python utils/scrape_grants.py --site umich
 
 # Limit to specific number of items
-python utils/scrape_grants.py --max-items 20
+python utils/scrape_grants.py --site umich --max-items 20
 
-# Scrape from multiple sources
-python utils/scrape_grants.py --base https://umich.infoready4.com --base https://umms.infoready4.com
+# Fast scan mode (just check for new IDs)
+python utils/scrape_grants.py --site umich --fast-scan
 
-# Add a custom tag to output files
-python utils/scrape_grants.py --suffix daily
+# Incremental mode (only process new grants)
+python utils/scrape_grants.py --site umich --incremental
 
-# Only generate JSON (no auto-CSV)
-python utils/scrape_grants.py --no-csv
+# Process in batches (for large sources)
+python utils/scrape_grants.py --site umich --batch-size 10
 
 # Change output directory
-python utils/scrape_grants.py --output-dir custom-output
+python utils/scrape_grants.py --site umich --output-dir custom-output
 ```
 
 ### Data Management
 
-OpTrack maintains one database file and CSV per source, which are automatically updated when you run the scraper or tracker:
+OpTrack maintains one database file and CSV per source, which are automatically updated when you run the scraper:
 
 ```bash
 # Update the umich database
-python core/grant_tracker.py --fetch-details --source umich
+python utils/scrape_grants.py --site umich --incremental
 
 # Update the umms database 
-python core/grant_tracker.py --fetch-details --source umms
+python utils/scrape_grants.py --site umms --incremental
 
-# Update multiple source databases at once
-python utils/scrape_grants.py
+# Update multiple source databases at once (based on websites.json)
+python scripts/optrack_incremental.sh
+
+# Convert databases to CSV
+python utils/json_converter.py --site umich
+python utils/json_converter.py --site umms
 ```
 
-You can also export additional files when needed:
+You can also perform fast scans which only check for new IDs without fetching details:
 
 ```bash
-# Export new grants when running the tracker
-python core/grant_tracker.py --fetch-details --source umich --export
+# Fast scan to quickly identify new grants
+python utils/scrape_grants.py --site umich --fast-scan
 
-# Export when running the scraper
-python utils/scrape_grants.py --export
+# Full scan with details for new grants only
+python utils/scrape_grants.py --site umich --incremental
 
-# Export from specific sources
-python core/export_grants.py --sources umich umms
+# Convert updated database to CSV
+python utils/json_converter.py --site umich
 ```
 
 #### CSV Format
