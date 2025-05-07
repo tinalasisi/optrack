@@ -31,6 +31,14 @@ else
   echo "✓ '$UPDATES_BRANCH' branch already exists"
 fi
 
+# Check for uncommitted changes
+STASHED=false
+if [[ -n $(git status --porcelain) ]]; then
+  echo "🔄 Stashing uncommitted changes"
+  git stash save "Automatic stash before switching to $UPDATES_BRANCH branch"
+  STASHED=true
+fi
+
 # Switch to auto-updates branch
 echo "🔄 Switching to '$UPDATES_BRANCH' branch"
 git checkout "$UPDATES_BRANCH"
@@ -66,6 +74,8 @@ git commit -m "Start OpTrack scan on $(date +"%Y-%m-%d")"
 
 # Run the incremental script directly on auto-updates branch
 echo "🔍 Running OpTrack incremental scan on '$UPDATES_BRANCH' branch"
+# Pass OPTRACK_LOG_FILE env variable to prevent duplicate log creation
+export OPTRACK_LOG_FILE="$LOG_FILE"
 "$REPO_ROOT/scripts/optrack_incremental.sh"
 
 # Update the log with end time
@@ -114,6 +124,12 @@ fi
 # Return to original branch
 echo "🔙 Returning to '$ORIGINAL_BRANCH' branch"
 git checkout "$ORIGINAL_BRANCH"
+
+# Apply stashed changes if we stashed them
+if [ "$STASHED" = true ]; then
+  echo "🔄 Applying stashed changes"
+  git stash pop
+fi
 
 echo "✅ OpTrack scan completed on '$UPDATES_BRANCH' branch"
 echo "📝 Check the '$UPDATES_BRANCH' branch for updates"

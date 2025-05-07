@@ -158,29 +158,35 @@ echo "==== OpTrack full scan completed at $(date) ====" >> $OUTPUT_DIR/scan_log.
 COMPLETION_TIME=$(date +"%Y-%m-%d %H:%M:%S")
 echo "Scan complete. See $OUTPUT_DIR/grant_summary.txt for results."
 
-# Create a log entry in the dedicated logs directory
-LOG_DIR="$REPO_PATH/logs/scheduled_runs"
-LOG_FILE="$LOG_DIR/run_$(date +"%Y%m%d_%H%M%S").log"
-mkdir -p "$LOG_DIR"
+# Create a log entry only if not already provided by parent script
+if [ -z "$OPTRACK_LOG_FILE" ]; then
+  LOG_DIR="$REPO_PATH/logs/scheduled_runs"
+  LOG_FILE="$LOG_DIR/run_$(date +"%Y%m%d_%H%M%S").log"
+  mkdir -p "$LOG_DIR"
 
-# Prepare the log content
-{
-  echo "==== OpTrack Scheduled Run ===="
-  echo "Date: $COMPLETION_TIME"
-  echo "Mode: Full"
-  echo "Output Directory: $OUTPUT_DIR"
-  echo ""
-  echo "=== Sites Processed ==="
-  
-  # Get database statistics for the log
-  if [ -f "$OUTPUT_DIR/grant_summary.txt" ]; then
-    cat "$OUTPUT_DIR/grant_summary.txt" >> "$LOG_FILE"
-  fi
-  
-  echo ""
-  echo "=== Grants in Database ==="
-  # This will be populated by the git diff check below
-} > "$LOG_FILE"
+  # Prepare the log content
+  {
+    echo "==== OpTrack Scheduled Run ===="
+    echo "Date: $COMPLETION_TIME"
+    echo "Mode: Full"
+    echo "Output Directory: $OUTPUT_DIR"
+    echo ""
+    echo "=== Sites Processed ==="
+    
+    # Get database statistics for the log
+    if [ -f "$OUTPUT_DIR/grant_summary.txt" ]; then
+      cat "$OUTPUT_DIR/grant_summary.txt" >> "$LOG_FILE"
+    fi
+    
+    echo ""
+    echo "=== Grants in Database ==="
+    # This will be populated by the git diff check below
+  } > "$LOG_FILE"
+else
+  # Use the log file provided by the parent script
+  LOG_FILE="$OPTRACK_LOG_FILE"
+  echo "Using existing log file: $LOG_FILE"
+fi
 
 # Only perform Git operations if not in test mode
 if [ "$TEST_MODE" = false ]; then
