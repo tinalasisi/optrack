@@ -367,9 +367,11 @@ Cookies typically expire after 7-14 days. If cookies expire during a scheduled r
 2. It will log warnings about cookie expiration
 3. Next time you run the script interactively, it will prompt to refresh cookies
 
-#### Automated Git Commits
+#### Automated Git Integration
 
-The scripts automatically commit changes to Git when run in production mode (without the `--test` flag):
+The scripts automatically manage Git operations when run in production mode (without the `--test` flag):
+
+##### Automated Commits
 
 - **Incremental Script**: Commits with message "Auto-update: Found X new grants on YYYY-MM-DD"
 - **Full Script**: Commits with message "Full database rebuild: X grants on YYYY-MM-DD"
@@ -377,6 +379,27 @@ The scripts automatically commit changes to Git when run in production mode (wit
 This provides a clear history of when new grants were found. No commits are made when:
 - The script is run in test mode
 - No changes are detected in the database
+
+##### Branch Management
+
+OpTrack provides a special script to run operations directly on a separate branch for automated updates:
+
+```bash
+# Run incremental update directly on auto-updates branch
+bash scripts/run_on_autoupdates.sh
+```
+
+This workflow:
+1. Switches to the "auto-updates" branch
+2. Runs the incremental scan
+3. Commits any changes directly to this branch
+4. Pushes changes to the remote if available
+5. Returns to your original branch
+6. Keeps your main branch completely untouched
+
+You can then review the changes on the "auto-updates" branch before merging them to your main branch. This approach ensures that automated updates never affect your main working branch, making it ideal for scheduled automation.
+
+> **Note**: For automated scheduling, you should schedule the `run_on_autoupdates.sh` script rather than the standard incremental script.
 
 #### Logging
 

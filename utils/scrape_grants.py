@@ -451,6 +451,7 @@ def scan_for_new_ids(
         base_url: The base URL of the site to scan
         seen_ids: Set of already seen competition IDs for this site
         site_name: The name of the site being scanned
+        visible: Whether to show the browser UI
         
     Returns:
         A set of new competition IDs not previously seen
@@ -579,7 +580,7 @@ def scrape_all(
                 if r.status_code in (403, 404):
                     logger.info("🙈  JSON endpoint unavailable, switching to Selenium …")
                     use_json = False
-                    driver = create_selenium_driver(headless=not args.visible)
+                    driver = create_selenium_driver(headless=not visible)  # Use the visible parameter passed to the function
                     logger.info("Selenium driver initialized successfully")
                     continue
                 r.raise_for_status()
@@ -1026,7 +1027,7 @@ def main() -> None:
             if site_name in global_seen_ids:
                 site_seen_ids.update(global_seen_ids[site_name])
             
-            new_ids = scan_for_new_ids(sess, b, site_seen_ids, site_name, visible=args.visible)
+            new_ids = scan_for_new_ids(sess, b, site_seen_ids, site_name, visible=args.visible if hasattr(args, 'visible') else False)
             
             # Update history
             if new_ids:
@@ -1054,7 +1055,7 @@ def main() -> None:
             fast_scan=args.fast_scan,
             seen_ids=site_seen_ids,
             site_name=site_name,
-            visible=args.visible,
+            visible=args.visible if hasattr(args, 'visible') else False,
             batch_size=args.batch_size,
             batch_index=args.batch_index
         )
