@@ -252,26 +252,67 @@ python tests/test_shell_scripts.py --verbose
 python tests/test_shell_scripts.py --list-files
 ```
 
-#### Running Production Scripts
+### Running OpTrack Scripts
 
-To run the actual shell scripts in production mode:
+OpTrack provides two main scripts for database maintenance:
+
+1. **Full Script** (`optrack_full.sh`): Rebuilds the entire database from scratch
+   - Use this for initial setup or complete database refresh
+   - Overwrites existing data for all grants
+
+2. **Incremental Script** (`optrack_incremental.sh`): Only processes new grants
+   - Use this for regular updates (daily/weekly runs)
+   - Preserves existing data and only adds new grants
+   - Much faster than full script for routine updates
+
+#### Testing Mode vs. Production Mode
+
+All scripts can run in two modes:
+
+- **Production Mode**: Updates the main database in `output/db/`
+- **Test Mode**: Uses isolated test environment in `output/test/` (won't affect production data)
+
+Always use test mode first when making changes or testing new features.
+
+#### Running in Test Mode
 
 ```bash
-# Run incremental update on all websites
-bash scripts/optrack_incremental.sh
+# Test incremental update (safe, won't affect production data)
+bash scripts/optrack_incremental.sh --test --site umich
 
-# Run full update on all websites
+# Test full update (safe, won't affect production data)  
+bash scripts/optrack_full.sh --test --site umich
+
+# Limit items for faster testing
+bash scripts/optrack_incremental.sh --test --max-items 5 --site umich
+
+# Clean up test files when done
+python tests/purge_tests.py --force
+```
+
+#### Running in Production Mode
+
+Only run in production mode when you're confident everything works correctly:
+
+```bash
+# First-time setup (full database build)
 bash scripts/optrack_full.sh
 
-# Run incremental update for a specific site
-bash scripts/optrack_incremental.sh --site umich
+# Regular daily/weekly updates (incremental, much faster)
+bash scripts/optrack_incremental.sh
 
-# Run full update for a specific site
+# Process only a specific site
 bash scripts/optrack_full.sh --site umich
-
-# Limit the number of items processed
-bash scripts/optrack_incremental.sh --max-items 10
 ```
+
+#### When to Use --max-items
+
+The `--max-items` parameter limits how many grants to process:
+
+- **For testing**: Use `--max-items 1` or `--max-items 5` to quickly verify functionality
+- **For production**: Generally omit this parameter to process all available grants
+- **For debugging**: Use with small numbers to troubleshoot issues
+- **For rate limiting**: Use on very large sources to avoid overloading servers
 
 #### Managing Test Files
 
