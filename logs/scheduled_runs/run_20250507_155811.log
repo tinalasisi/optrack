@@ -6,3 +6,15 @@ Mode: Incremental
 === Run in Progress ===
 Scan started at 2025-05-07 15:58:11 - please wait for completion...
 
+
+=== Run Completed ===
+End Time: 2025-05-07 15:58:30
+
+=== Database Summary ===
+Database Summary - 2025-05-07 15:58:12
+--------------------------------------------------
+umich: 37 grants
+umms: 46 grants
+--------------------------------------------------
+
+Total Duration: 00:00:19 (HH:MM:SS)
