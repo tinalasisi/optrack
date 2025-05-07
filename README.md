@@ -118,17 +118,39 @@ This structure keeps your data neatly organized:
 3. **Test Isolation**: All test files are kept separate from production data
 4. **Standard CSV Format**: All CSV files use the same standardized format with a `details_json` column
 
-#### Automation with scan_grants.sh
+#### Scheduled Automation
 
-For automatic scanning of multiple sources, use the provided shell script:
+OpTrack provides two different options for automating your grant scans:
+
+##### Option 1: Local Scheduler (Recommended for Personal Use)
 
 ```bash
-# Scan all configured sources
-./scripts/scan_grants.sh
-
-# Set up cron job
-./scripts/setup_cron.sh
+# Set up local scheduler for macOS 
+bash scripts/setup_local_scheduler.sh
 ```
+
+The `setup_local_scheduler.sh` script creates a launchd configuration for macOS that:
+- Runs at your chosen schedule (daily, twice daily, morning, or evening)
+- **Only executes when your computer is awake** (ideal for laptops)
+- Automatically commits changes to Git
+- Maintains detailed logs of each run
+- Works with your local repository path (no hardcoding)
+
+This is the recommended approach for personal use on macOS machines that aren't always running.
+
+##### Option 2: Traditional Cron Job (For Servers/Always-On Systems)
+
+```bash
+# Set up traditional cron job
+bash scripts/setup_cron.sh
+```
+
+The `setup_cron.sh` script creates a traditional cron job that:
+- Runs at a specific time regardless of system state
+- Works on Linux, macOS, and most Unix-like systems
+- Requires the system to be running at the scheduled time
+
+This approach is better for server environments where the system is always on and the job needs to run at precise times.
 
 #### Exporting Grant Data
 
@@ -313,6 +335,58 @@ The `--max-items` parameter limits how many grants to process:
 - **For production**: Generally omit this parameter to process all available grants
 - **For debugging**: Use with small numbers to troubleshoot issues
 - **For rate limiting**: Use on very large sources to avoid overloading servers
+
+#### Headless vs. Visible Browser Mode
+
+By default, all scripts run with Chrome in headless mode (no visible browser window). This is ideal for:
+- Scheduled jobs
+- Server environments
+- Background processing
+
+If you need to see the browser for troubleshooting, you can use the `--visible` flag:
+
+```bash
+# Run with visible browser window
+python utils/scrape_grants.py --visible
+```
+
+#### Cookie Management
+
+Cookies are used to avoid interactive login for each run. To manage cookies:
+
+```bash
+# Check if cookies are valid and prompt to refresh if needed
+bash scripts/check_cookies.sh
+
+# Force refresh cookies (requires interactive login)
+python core/login_and_save_cookies.py
+```
+
+Cookies typically expire after 7-14 days. If cookies expire during a scheduled run:
+1. The script will automatically fall back to Selenium
+2. It will log warnings about cookie expiration
+3. Next time you run the script interactively, it will prompt to refresh cookies
+
+#### Automated Git Commits
+
+The scripts automatically commit changes to Git when run in production mode (without the `--test` flag):
+
+- **Incremental Script**: Commits with message "Auto-update: Found X new grants on YYYY-MM-DD"
+- **Full Script**: Commits with message "Full database rebuild: X grants on YYYY-MM-DD"
+
+This provides a clear history of when new grants were found. No commits are made when:
+- The script is run in test mode
+- No changes are detected in the database
+
+#### Logging
+
+All script runs are logged in the `logs/scheduled_runs` directory:
+
+- Each run creates a timestamped log file: `run_YYYYMMDD_HHMMSS.log`
+- Logs contain information about the run mode, sites processed, and any changes made
+- Logs are automatically included in Git commits when changes are detected
+
+These logs provide a complete history of all scheduled runs and make it easy to track when and how the database was updated.
 
 #### Managing Test Files
 
