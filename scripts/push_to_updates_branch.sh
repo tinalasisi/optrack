@@ -14,6 +14,8 @@ set -e  # Exit on error
 UPDATES_BRANCH="auto-updates"
 ORIGINAL_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 REPO_ROOT=$(git rev-parse --show-toplevel)
+LOG_DIR="$REPO_ROOT/logs/scheduled_runs"
+LOG_FILE="$LOG_DIR/run_$(date +"%Y%m%d_%H%M%S").log"
 
 # Print with timestamp
 log() {
@@ -44,6 +46,17 @@ else
     log "✓ '$UPDATES_BRANCH' branch already exists"
 fi
 
+# Save a copy of any existing log file to move to the updates branch
+if [ -f "$LOG_FILE" ]; then
+    TEMP_LOG_FILE="/tmp/optrack_run_log_temp.txt"
+    cp "$LOG_FILE" "$TEMP_LOG_FILE"
+    
+    # Remove the log file from the original branch since we'll move it to updates branch
+    rm "$LOG_FILE"
+    # Remove from git tracking if it was added
+    git reset HEAD "$LOG_FILE" 2>/dev/null || true
+fi
+
 # Save current branch to return to it later
 log "💾 Saving current state on '$ORIGINAL_BRANCH'"
 
@@ -54,6 +67,24 @@ git checkout "$UPDATES_BRANCH"
 # Update updates branch with changes from original branch
 log "🔄 Updating '$UPDATES_BRANCH' with changes from '$ORIGINAL_BRANCH'"
 git merge "$ORIGINAL_BRANCH" --no-edit
+
+# Move the log file to the updates branch if we saved it
+if [ -f "$TEMP_LOG_FILE" ]; then
+    # Make sure the log directory exists
+    mkdir -p "$LOG_DIR"
+    
+    # Copy the log file
+    cp "$TEMP_LOG_FILE" "$LOG_FILE"
+    
+    # Add to git
+    git add "$LOG_FILE"
+    
+    # Amend the last commit to include the log
+    git commit --amend --no-edit
+    
+    # Clean up
+    rm "$TEMP_LOG_FILE"
+fi
 
 # Push changes to remote
 log "⬆️ Pushing changes to remote '$UPDATES_BRANCH' branch"

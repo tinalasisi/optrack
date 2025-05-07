@@ -185,7 +185,9 @@ mkdir -p "$LOG_DIR"
 # Only perform Git operations if not in test mode
 if [ "$TEST_MODE" = false ]; then
   # Check if there are any changes to commit
+  HAS_CHANGES=false
   if git status --porcelain | grep -q "$OUTPUT_DIR"; then
+    HAS_CHANGES=true
     # Determine which files changed
     CHANGED_FILES=$(git status --porcelain | grep "$OUTPUT_DIR" | awk '{print $2}')
     echo "$CHANGED_FILES" >> "$LOG_FILE"
@@ -197,25 +199,38 @@ if [ "$TEST_MODE" = false ]; then
       GRANTS_COUNT=$(grep -o "[0-9]* grants" "$OUTPUT_DIR/grant_summary.txt" | awk '{s+=$1} END {print s}')
     fi
     
-    # Commit the changes
+    # Prepare commit message for the log file
     COMMIT_MSG="Full database rebuild: $GRANTS_COUNT grants on $(date +"%Y-%m-%d")"
+    echo "Commit message: $COMMIT_MSG" >> "$LOG_FILE"
+    
+    # Commit the changes (only database files, not log file)
     git add $OUTPUT_DIR
-    git add "$LOG_FILE"
     git commit -m "$COMMIT_MSG"
     
     echo ""
     echo "✅ Changes committed to Git: $COMMIT_MSG"
-    echo "Commit message: $COMMIT_MSG" >> "$LOG_FILE"
-    
-    # Push changes to auto-updates branch if the script exists
-    if [ -x "$REPO_PATH/scripts/push_to_updates_branch.sh" ]; then
-      echo "🔄 Pushing changes to auto-updates branch..."
-      "$REPO_PATH/scripts/push_to_updates_branch.sh"
-      echo "Pushed changes to auto-updates branch" >> "$LOG_FILE"
-    fi
   else
     echo "No changes detected in the database." >> "$LOG_FILE"
     echo "ℹ️  No changes detected, nothing to commit."
+  fi
+  
+  # Always run branch management if the script exists, regardless of whether there were changes
+  if [ -x "$REPO_PATH/scripts/push_to_updates_branch.sh" ]; then
+    echo "🔄 Running branch management system..."
+    
+    # Check if we have any unpushed commits (including those from previous runs)
+    UNPUSHED_COMMITS=$(git log --branches --not --remotes --oneline | wc -l | tr -d '[:space:]')
+    
+    if [ "$UNPUSHED_COMMITS" -gt 0 ] || [ "$HAS_CHANGES" = true ]; then
+      "$REPO_PATH/scripts/push_to_updates_branch.sh"
+      echo "Ran branch management system" >> "$LOG_FILE"
+      if [ "$UNPUSHED_COMMITS" -gt 0 ]; then
+        echo "Pushed $UNPUSHED_COMMITS commit(s) to auto-updates branch" >> "$LOG_FILE"
+      fi
+    else
+      echo "Branch management: No unpushed commits found" >> "$LOG_FILE"
+      echo "ℹ️  Branch management: No unpushed commits to push"
+    fi
   fi
 fi
 
