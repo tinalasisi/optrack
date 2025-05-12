@@ -39,11 +39,14 @@ RUN_DIR = TEST_DIR / "run"
 TEST_LOG_DIR = TEST_DIR / "logs"
 SCRIPT_PATH = BASE_DIR / "scripts" / "optrack_incremental.sh"
 
+# Create directories first
+for dir_path in [TEST_DIR, VALIDATION_DIR, RUN_DIR, TEST_LOG_DIR]:
+    dir_path.mkdir(exist_ok=True, parents=True)
+
 # Print test directory for user reference
 print(f"\nTest output will be stored in: {TEST_DIR}\n")
 
-# Configure logging
-# Create log file in test log directory
+# Configure logging after directories are created
 log_file = TEST_LOG_DIR / "test_run.log"
 
 logging.basicConfig(
@@ -58,11 +61,8 @@ logger = logging.getLogger("test_grant_detection")
 
 def setup_test_directories():
     """Set up clean test directories with timestamped structure."""
-    # Create main test directories
-    for dir_path in [TEST_DIR, VALIDATION_DIR, RUN_DIR, TEST_LOG_DIR]:
-        dir_path.mkdir(exist_ok=True, parents=True)
-
-    logger.info(f"Created test directory structure at {TEST_DIR}")
+    # Directories are already created at module level
+    logger.info(f"Using test directory structure at {TEST_DIR}")
 
 def create_validation_data(site_name, num_to_skip=1, max_items=None, add_archived=True):
     """
