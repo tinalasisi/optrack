@@ -1,13 +1,13 @@
 {
   "files": {
     "main.css": "/optrack/static/css/main.ef2d66f8.css",
-    "main.js": "/optrack/static/js/main.6cd4a25d.js",
+    "main.js": "/optrack/static/js/main.d3e8c438.js",
     "index.html": "/optrack/index.html",
     "main.ef2d66f8.css.map": "/optrack/static/css/main.ef2d66f8.css.map",
-    "main.6cd4a25d.js.map": "/optrack/static/js/main.6cd4a25d.js.map"
+    "main.d3e8c438.js.map": "/optrack/static/js/main.d3e8c438.js.map"
   },
   "entrypoints": [
     "static/css/main.ef2d66f8.css",
-    "static/js/main.6cd4a25d.js"
+    "static/js/main.d3e8c438.js"
   ]
 }

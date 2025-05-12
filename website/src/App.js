@@ -29,9 +29,19 @@ function App() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const response = await fetch('/sample-data.json');
+        // Create a dynamic path that works for both local and GitHub Pages deployment
+        // This will look for sample-data.json in the root of the deployment
+        const pathPrefix = process.env.PUBLIC_URL || '';
+        const response = await fetch(`${pathPrefix}/sample-data.json`);
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          // If that fails, try the relative path as fallback
+          const fallbackResponse = await fetch('./sample-data.json');
+          if (!fallbackResponse.ok) {
+            throw new Error(`HTTP error! status: ${fallbackResponse.status}`);
+          }
+          const fallbackResult = await fallbackResponse.json();
+          setData(fallbackResult);
+          return setLoading(false);
         }
         const result = await response.json();
         setData(result);
