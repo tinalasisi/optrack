@@ -133,18 +133,27 @@ header {
   margin-top: 15px;
 }
 
-.storage-stats {
+.pull-stats {
   margin-top: 15px;
 }
 
-.storage-title {
+.pull-stats-title {
   font-size: 14px;
   color: #2c3e50;
   margin-bottom: 10px;
+  text-align: center;
 }
 
 .chart-container {
   height: 150px;
+}
+
+.pull-comparison {
+  margin-top: 20px;
+}
+
+.pull-bar-container {
+  height: 120px;
 }
 
 footer {

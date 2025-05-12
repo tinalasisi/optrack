@@ -78,7 +78,7 @@ def get_site_names(is_test: bool = False) -> List[str]:
 def get_site_stats(site_name: str, is_test: bool = False) -> Dict[str, Any]:
     """Get statistics for a specific site."""
     db_dir = OUTPUT_TEST_DIR if is_test else OUTPUT_DB_DIR
-    
+
     stats = {
         "site": site_name,
         "database_exists": False,
@@ -87,6 +87,11 @@ def get_site_stats(site_name: str, is_test: bool = False) -> Dict[str, Any]:
         "seen_ids_count": 0,
         "grants_without_details": 0,  # IDs seen but not in database
         "last_updated": None,
+        "latest_pull": {
+            "timestamp": None,
+            "total_found": 0,
+            "new_grants": 0
+        },
         "storage_stats": {
             "legacy_json_size": 0,
             "jsonl_size": 0,
@@ -108,8 +113,40 @@ def get_site_stats(site_name: str, is_test: bool = False) -> Dict[str, Any]:
                 stats["database_exists"] = True
                 stats["storage_stats"]["legacy_json_size"] = json_path.stat().st_size
                 stats["storage_format"] = "legacy_json"
+
+                # Set latest pull timestamp to match last_updated
+                stats["latest_pull"]["timestamp"] = stats["last_updated"]
+                stats["latest_pull"]["total_found"] = stats["grant_count"]
         except Exception as e:
             logger.warning(f"Error reading database for {site_name}: {e}")
+
+    # Try to find latest run log
+    log_dir = BASE_DIR / "output/logs/runs"
+    if log_dir.exists():
+        # Find the most recent log directory
+        log_dirs = sorted([d for d in log_dir.glob("*") if d.is_dir()],
+                         key=lambda x: x.name, reverse=True)
+
+        for recent_log_dir in log_dirs[:5]:  # Check the 5 most recent logs
+            # Check for comparison summary file
+            comparison_file = recent_log_dir / "comparison_summary.json"
+            if comparison_file.exists():
+                try:
+                    with open(comparison_file, "r", encoding="utf-8") as f:
+                        comparison_data = json.load(f)
+                        if "sites" in comparison_data and site_name in comparison_data["sites"]:
+                            site_data = comparison_data["sites"][site_name]
+                            # Extract new grants info
+                            if "new_count" in site_data and site_data["new_count"] > 0:
+                                stats["latest_pull"]["new_grants"] = site_data["new_count"]
+                                stats["latest_pull"]["timestamp"] = get_datetime_str(
+                                    comparison_data.get("completed_at", ""))
+                                # Estimate total found
+                                if "before_count" in site_data and "after_count" in site_data:
+                                    stats["latest_pull"]["total_found"] = site_data["after_count"]
+                                break
+                except Exception as e:
+                    logger.warning(f"Error reading comparison data for {site_name}: {e}")
     
     # Check append-only JSONL database
     jsonl_path = db_dir / JSONL_PATTERN.format(site=site_name)
@@ -191,6 +228,7 @@ def get_all_stats(site_name: Optional[str] = None, is_test: bool = False) -> Dic
         "total_grants": stats["total_grants"],
         "total_seen_ids": stats["total_seen_ids"],
         "pending_details": sum(s["grants_without_details"] for s in stats["sites"]),
+        "new_grants_last_pull": sum(s["latest_pull"]["new_grants"] for s in stats["sites"]),
         "last_updated": max([s["last_updated"] for s in stats["sites"] if s["last_updated"]], default="N/A")
     }
     
@@ -206,10 +244,11 @@ def print_text_report(stats: Dict[str, Any]) -> None:
     print(f"Total Sites: {stats['summary']['total_sites']}")
     print(f"Total Grants: {stats['summary']['total_grants']}")
     print(f"Total Seen IDs: {stats['summary']['total_seen_ids']}")
+    print(f"New Grants (Last Pull): {stats['summary']['new_grants_last_pull']}")
     print(f"Pending Details: {stats['summary']['pending_details']} (IDs seen but not in database)")
     print(f"Last Updated: {stats['summary']['last_updated']}")
     print("")
-    
+
     print(f"=== Site Details ===")
     for site in stats["sites"]:
         print(f"Site: {site['site']}")
@@ -218,6 +257,10 @@ def print_text_report(stats: Dict[str, Any]) -> None:
         print(f"  Seen IDs: {site['seen_ids_count']}")
         if site["grants_without_details"] > 0:
             print(f"  Pending Details: {site['grants_without_details']} (IDs seen but not in database)")
+        print(f"  Latest Pull:")
+        print(f"    Total Found: {site['latest_pull']['total_found']}")
+        print(f"    New Grants: {site['latest_pull']['new_grants']}")
+        print(f"    Timestamp: {site['latest_pull']['timestamp']}")
         print(f"  Last Updated: {site['last_updated']}")
         print(f"  Storage (KB):")
         print(f"    Legacy JSON: {site['storage_stats']['legacy_json_size']}")
@@ -231,12 +274,12 @@ def print_csv_report(stats: Dict[str, Any]) -> None:
     """Print a CSV report of the statistics."""
     # Header
     headers = [
-        "site", "database_format", "grants_in_database", "seen_ids", 
-        "pending_details", "last_updated", "legacy_json_kb", "jsonl_data_kb",
-        "index_kb", "csv_kb", "total_kb"
+        "site", "database_format", "grants_in_database", "seen_ids",
+        "pending_details", "latest_pull_total", "latest_pull_new",
+        "latest_pull_time", "last_updated", "total_kb"
     ]
     print(",".join(headers))
-    
+
     # Site rows
     for site in stats["sites"]:
         row = [
@@ -245,15 +288,14 @@ def print_csv_report(stats: Dict[str, Any]) -> None:
             str(site["grant_count"]),
             str(site["seen_ids_count"]),
             str(site["grants_without_details"]),
+            str(site["latest_pull"]["total_found"]),
+            str(site["latest_pull"]["new_grants"]),
+            site["latest_pull"]["timestamp"] or "N/A",
             site["last_updated"] or "N/A",
-            str(site["storage_stats"]["legacy_json_size"]),
-            str(site["storage_stats"]["jsonl_size"]),
-            str(site["storage_stats"]["index_size"]),
-            str(site["storage_stats"]["csv_size"]),
             str(site["storage_stats"]["total_size"])
         ]
         print(",".join(row))
-    
+
     # Summary row
     summary_row = [
         "TOTAL",
@@ -261,11 +303,10 @@ def print_csv_report(stats: Dict[str, Any]) -> None:
         str(stats["summary"]["total_grants"]),
         str(stats["summary"]["total_seen_ids"]),
         str(stats["summary"]["pending_details"]),
+        "",
+        str(stats["summary"]["new_grants_last_pull"]),
+        "",
         stats["summary"]["last_updated"],
-        "",
-        "",
-        "",
-        "",
         ""
     ]
     print(",".join(summary_row))
