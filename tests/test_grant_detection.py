@@ -608,8 +608,13 @@ def main():
         )
     
     # Print detailed summary
-    logger.info("\n=== Test Summary ===")
+    summary_lines = []
+    summary_lines.append("=== Test Summary ===")
     passed_count = sum(1 for success in results.values() if success)
+    summary_lines.append(f"Tested {len(results)} sites: {passed_count} passed, {len(results) - passed_count} failed")
+
+    # Log to console
+    logger.info("\n=== Test Summary ===")
     logger.info(f"Tested {len(results)} sites: {passed_count} passed, {len(results) - passed_count} failed")
 
     # Get some details from the validation files for reporting
@@ -632,29 +637,86 @@ def main():
 
         if site in test_details:
             details = test_details[site]
-            logger.info(f"{site}: {status}")
-            logger.info(f"  - Test scenario: {details['full_count']} grants in full DB, {details['partial_count']} in partial DB")
-            logger.info(f"  - Expected to detect {details['missing_count']} missing grants and {details.get('archived_count', 0)} archived grants")
+            site_summary = []
+            site_summary.append(f"{site}: {status}")
+            site_summary.append(f"  - Test scenario: {details['full_count']} grants in full DB, {details['partial_count']} in partial DB")
+            site_summary.append(f"  - Expected to detect {details['missing_count']} missing grants and {details.get('archived_count', 0)} archived grants")
+
             if details['missing_ids']:
                 id_sample = ", ".join(details['missing_ids'])
-                logger.info(f"  - Sample missing IDs: {id_sample}{' and more...' if len(details['missing_ids']) < details['missing_count'] else ''}")
+                site_summary.append(f"  - Sample missing IDs: {id_sample}{' and more...' if len(details['missing_ids']) < details['missing_count'] else ''}")
+
             if details.get('archived_ids'):
                 archived_sample = ", ".join(details['archived_ids'])
-                logger.info(f"  - Archived IDs: {archived_sample}{' and more...' if len(details['archived_ids']) < details.get('archived_count', 0) else ''}")
+                site_summary.append(f"  - Archived IDs: {archived_sample}{' and more...' if len(details['archived_ids']) < details.get('archived_count', 0) else ''}")
+
+            # Add to overall summary
+            summary_lines.extend(site_summary)
+
+            # Log to console
+            for line in site_summary:
+                logger.info(line)
+
+            # Write site-specific summary
+            site_run_dir = RUN_DIR / site
+            if site_run_dir.exists():
+                site_summary_path = site_run_dir / "test_summary.txt"
+                with open(site_summary_path, "w") as f:
+                    f.write("\n".join(site_summary))
         else:
             logger.info(f"{site}: {status} (no test details available)")
+            summary_lines.append(f"{site}: {status} (no test details available)")
 
+    # Final summary and verification points
     if all(results.values()):
-        logger.info("\n🎉 All tests passed! The incremental detection logic is working correctly.")
-        logger.info("Tests verified:")
-        logger.info("1. Database state comparison correctly identifies missing grants (new grants to add)")
-        logger.info("2. The comparison logic accurately tracks which specific grants are missing")
-        logger.info("3. The logic properly identifies archived grants (exist in database but not in source)")
-        logger.info("4. The HAS_CHANGES flag properly indicates when changes are detected")
-        sys.exit(0)
+        # Success message
+        success_msg = "\n🎉 All tests passed! The incremental detection logic is working correctly."
+        summary_lines.append(success_msg)
+        logger.info(success_msg)
+
+        # Verification points
+        verification_points = [
+            "Tests verified:",
+            "1. Database state comparison correctly identifies missing grants (new grants to add)",
+            "2. The comparison logic accurately tracks which specific grants are missing",
+            "3. The logic properly identifies archived grants (exist in database but not in source)",
+            "4. The HAS_CHANGES flag properly indicates when changes are detected"
+        ]
+
+        # Add to summary and log
+        summary_lines.extend(verification_points)
+        for point in verification_points:
+            logger.info(point)
     else:
-        logger.error("\n❌ Some tests failed. The incremental detection logic may not be working for all sites.")
-        sys.exit(1)
+        # Failure message
+        fail_msg = "\n❌ Some tests failed. The incremental detection logic may not be working for all sites."
+        summary_lines.append(fail_msg)
+        logger.error(fail_msg)
+
+    # Write overall summary to file
+    summary_file = TEST_DIR / "test_summary.txt"
+    with open(summary_file, "w") as f:
+        f.write("\n".join(summary_lines))
+    logger.info(f"Test summary saved to {summary_file}")
+
+    # Also create JSON summary
+    summary_json = {
+        "timestamp": datetime.now().isoformat(),
+        "sites_tested": len(results),
+        "passed": passed_count,
+        "failed": len(results) - passed_count,
+        "all_passed": all(results.values()),
+        "site_results": {site: {"passed": success} for site, success in results.items()},
+        "details": test_details
+    }
+
+    json_summary_file = TEST_DIR / "test_summary.json"
+    with open(json_summary_file, "w") as f:
+        json.dump(summary_json, f, indent=2)
+    logger.info(f"JSON summary saved to {json_summary_file}")
+
+    # Exit with appropriate code
+    sys.exit(0 if all(results.values()) else 1)
 
 if __name__ == "__main__":
     main()
