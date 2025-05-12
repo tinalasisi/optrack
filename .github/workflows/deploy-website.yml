@@ -31,6 +31,8 @@ jobs:
       - name: Generate fresh statistics
         run: |
           python core/stats.py --json > website/public/sample-data.json
+          # Also save to docs directory for direct deployment
+          python core/stats.py --json > docs/sample-data.json
           
       - name: Set up Node.js
         uses: actions/setup-node@v3
@@ -44,6 +46,9 @@ jobs:
       - name: Build website
         working-directory: ./website
         run: npm run build
-        
-      # Build is already completed and available in website/build directory
-      # No need for separate deployment step as we're deploying directly from the branch
+
+      - name: Copy build files to docs directory
+        run: |
+          rm -rf docs/*
+          cp -R website/build/* docs/
+          git add docs/
