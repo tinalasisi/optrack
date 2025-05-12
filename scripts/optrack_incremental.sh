@@ -58,6 +58,76 @@ if [ "$TEST_MODE" = true ]; then
   [ -n "$SITE" ] && echo "- Site: $SITE"
 fi
 
+# IMPORTANT: Capture grant IDs BEFORE scraping
+# Create a file to store the BEFORE counts for compatibility
+PREVIOUS_COUNTS_FILE="$REPO_PATH/before_counts.txt"
+echo "# Grant counts BEFORE scraping $(date)" > "$PREVIOUS_COUNTS_FILE"
+
+# Also create a JSON file with all grant IDs for accurate comparison
+PREVIOUS_IDS_FILE="$REPO_PATH/before_ids.json"
+
+# Get all competition IDs from current databases
+python -c "
+import json
+import os
+import sys
+
+# Function to extract IDs from database file
+def extract_ids(file_path):
+    ids = []
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, 'r') as f:
+                data = json.load(f)
+                if 'grants' in data and isinstance(data['grants'], dict):
+                    # Each key in the grants dict is a competition ID
+                    ids = list(data['grants'].keys())
+        except Exception as e:
+            print(f\"Error extracting IDs from {file_path}: {e}\", file=sys.stderr)
+    return ids
+
+# Store results in a dictionary
+result = {}
+
+# Load websites config
+try:
+    with open('data/websites.json') as f:
+        config = json.load(f)
+        
+    # Filter sites if specified
+    site_filter = '$SITE'
+    websites = config['websites']
+    if site_filter:
+        websites = [site for site in websites if site.get('name') == site_filter and site.get('enabled', True)]
+    else:
+        websites = [site for site in websites if site.get('enabled', True)]
+    
+    # Process each site
+    for site in websites:
+        site_name = site['name']
+        db_file = \"$OUTPUT_DIR/{}_grants.json\".format(site_name)
+        
+        # Extract IDs from this site's database
+        ids = extract_ids(db_file)
+        result[site_name] = {
+            'count': len(ids),
+            'ids': ids
+        }
+        
+        # Also write to the counts file for backward compatibility
+        print(f\"{site_name}: {len(ids)}\")
+        
+    # Save to JSON file
+    with open('$PREVIOUS_IDS_FILE', 'w') as f:
+        json.dump(result, f, indent=2)
+        
+except Exception as e:
+    print(f\"ERROR: {e}\")
+    # Create an empty JSON file to avoid errors later
+    with open('$PREVIOUS_IDS_FILE', 'w') as f:
+        json.dump({}, f)
+" >> "$PREVIOUS_COUNTS_FILE"
+
 # Read site information from websites.json and process each enabled site
 python -c "
 import json
@@ -199,34 +269,184 @@ fi
 
 # Only perform Git operations if not in test mode
 if [ "$TEST_MODE" = false ]; then
-  # Check if there are any changes to commit
+  # Create a file to store the AFTER database with all competition IDs
+  AFTER_IDS_FILE="$REPO_PATH/after_ids.json"
+
+  # Get all competition IDs from current databases AFTER scraping
+  python -c "
+import json
+import os
+import sys
+
+# Function to extract IDs from database file
+def extract_ids(file_path):
+    ids = []
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, 'r') as f:
+                data = json.load(f)
+                if 'grants' in data and isinstance(data['grants'], dict):
+                    # Each key in the grants dict is a competition ID
+                    ids = list(data['grants'].keys())
+        except Exception as e:
+            print(f\"Error extracting IDs from {file_path}: {e}\", file=sys.stderr)
+    return ids
+
+# Store results in a dictionary
+result = {}
+
+# Load websites config
+try:
+    with open('data/websites.json') as f:
+        config = json.load(f)
+
+    # Filter sites if specified
+    site_filter = '$SITE'
+    websites = config['websites']
+    if site_filter:
+        websites = [site for site in websites if site.get('name') == site_filter and site.get('enabled', True)]
+    else:
+        websites = [site for site in websites if site.get('enabled', True)]
+
+    # Process each site
+    for site in websites:
+        site_name = site['name']
+        db_file = \"$OUTPUT_DIR/{}_grants.json\".format(site_name)
+
+        # Extract IDs from this site's database
+        ids = extract_ids(db_file)
+        result[site_name] = {
+            'count': len(ids),
+            'ids': ids
+        }
+
+    # Save to JSON file
+    with open('$AFTER_IDS_FILE', 'w') as f:
+        json.dump(result, f, indent=2)
+
+except Exception as e:
+    print(f\"ERROR: {e}\", file=sys.stderr)
+    # Create an empty JSON file to avoid errors later
+    with open('$AFTER_IDS_FILE', 'w') as f:
+        json.dump({}, f)
+"
+
+  # Now compare the before and after IDs to find changes
+  # This uses JSON for accurate ID tracking rather than just counts
+  echo "=== Database Changes ===" >> "$LOG_FILE"
+
+  # Compare the before and after ID files to find new grants
+  NEW_GRANTS_COUNT=0
   HAS_CHANGES=false
-  if git status --porcelain | grep -q "$OUTPUT_DIR"; then
-    HAS_CHANGES=true
-    # Determine which files changed
-    CHANGED_FILES=$(git status --porcelain | grep "$OUTPUT_DIR" | awk '{print $2}')
-    echo "$CHANGED_FILES" >> "$LOG_FILE"
-    
-    # Count new grants from the summary file
-    NEW_GRANTS_COUNT=0
-    if [ -f "$OUTPUT_DIR/grant_summary.txt" ]; then
-      # Extract the total count
-      NEW_GRANTS_COUNT=$(grep -o "[0-9]* grants" "$OUTPUT_DIR/grant_summary.txt" | awk '{s+=$1} END {print s}')
+
+  # Use Python for more accurate comparison of JSON files
+  python -c "
+import json
+import sys
+
+try:
+    # Load before and after data
+    with open('$PREVIOUS_IDS_FILE', 'r') as f:
+        before_data = json.load(f)
+
+    with open('$AFTER_IDS_FILE', 'r') as f:
+        after_data = json.load(f)
+
+    # Track total new grants
+    new_grants_total = 0
+    has_changes = False
+
+    # Process each site
+    for site_name, after_site in after_data.items():
+        after_ids = set(after_site['ids'])
+        after_count = len(after_ids)
+
+        # Get before data for this site
+        before_site = before_data.get(site_name, {'ids': [], 'count': 0})
+        before_ids = set(before_site['ids'])
+        before_count = len(before_ids)
+
+        # Calculate differences
+        new_ids = after_ids - before_ids
+        removed_ids = before_ids - after_ids
+        new_count = len(new_ids)
+        removed_count = len(removed_ids)
+
+        # Update totals
+        new_grants_total += new_count
+        if new_count > 0:
+            has_changes = True
+
+        # Report for this site
+        if new_count > 0:
+            print(f\"{site_name}: {new_count} new grants (previous: {before_count}, current: {after_count})\")
+            # List some of the new IDs (limited to first 3 for brevity)
+            if new_ids:
+                sample_ids = list(new_ids)[:3]
+                print(f\"  New IDs sample: {', '.join(sample_ids)}{' and more...' if len(new_ids) > 3 else ''}\")
+        else:
+            print(f\"{site_name}: No new grants (count: {after_count})\")
+
+        # Report removed grants if any
+        if removed_count > 0:
+            print(f\"  Note: {removed_count} grants no longer in source but remain archived in database.\")
+
+    # Write results to shell variables
+    print(f\"NEW_GRANTS_COUNT={new_grants_total}\")
+    print(f\"HAS_CHANGES={'true' if has_changes else 'false'}\")
+
+except Exception as e:
+    print(f\"Error comparing databases: {e}\", file=sys.stderr)
+    print(\"NEW_GRANTS_COUNT=0\")
+    print(\"HAS_CHANGES=false\")
+" | while read -r line; do
+    if [[ "$line" == NEW_GRANTS_COUNT=* ]]; then
+      NEW_GRANTS_COUNT="${line#NEW_GRANTS_COUNT=}"
+    elif [[ "$line" == HAS_CHANGES=* ]]; then
+      HAS_CHANGES="${line#HAS_CHANGES=}"
+    else
+      echo "$line" >> "$LOG_FILE"
     fi
-    
+  done
+
+  # Clean up temp files
+  rm -f "$PREVIOUS_IDS_FILE" "$AFTER_IDS_FILE"
+
+  # Always report the findings based on our direct database comparison
+  if [ "$HAS_CHANGES" = true ]; then
+    # Check git status, but don't rely solely on it for determining if changes occurred
+    CHANGED_FILES=$(git status --porcelain | grep "$OUTPUT_DIR" | awk '{print $2}')
+    if [ -n "$CHANGED_FILES" ]; then
+      echo "Files with Git changes:" >> "$LOG_FILE"
+      echo "$CHANGED_FILES" >> "$LOG_FILE"
+    else
+      echo "No Git changes detected, but database counts indicate updates occurred." >> "$LOG_FILE"
+      echo "This often happens when changes were already committed on the auto-updates branch." >> "$LOG_FILE"
+    fi
+
     # Prepare commit message for the log file
     COMMIT_MSG="Auto-update: Found $NEW_GRANTS_COUNT new grants on $(date +"%Y-%m-%d")"
     echo "Commit message: $COMMIT_MSG" >> "$LOG_FILE"
-    
-    # Commit the changes (only database files, not log file)
+
+    # Attempt to commit the changes
     git add $OUTPUT_DIR
-    git commit -m "$COMMIT_MSG"
-    
+    if git commit -m "$COMMIT_MSG"; then
+      echo ""
+      echo "✅ Changes committed to Git: $COMMIT_MSG"
+      echo "Git commit successful" >> "$LOG_FILE"
+    else
+      echo ""
+      echo "ℹ️ No Git changes to commit, but $NEW_GRANTS_COUNT new grants were found"
+      echo "No Git changes to commit, but database counters indicate $NEW_GRANTS_COUNT new grants" >> "$LOG_FILE"
+      echo "This usually means the grants were already added in a previous run on this branch." >> "$LOG_FILE"
+    fi
+
+    # Record for the user that changes were detected
     echo ""
-    echo "✅ Changes committed to Git: $COMMIT_MSG"
+    echo "✅ Database changes detected: $NEW_GRANTS_COUNT new grants found"
   else
     echo "No new grants found in this scan." >> "$LOG_FILE"
-    echo "ℹ️  No changes detected, nothing to commit."
+    echo "ℹ️  No changes detected in grant databases."
   fi
   
   # Always run branch management if the script exists, regardless of whether there were changes
