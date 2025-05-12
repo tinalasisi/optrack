@@ -30,30 +30,39 @@ from utils.scrape_grants import load_website_config as get_website_config
 
 # Setup paths
 OUTPUT_DIR = BASE_DIR / "output"
-TEST_DIR = OUTPUT_DIR / "test"
+
+# Create a timestamped directory for this test run
+TEST_TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
+TEST_DIR = OUTPUT_DIR / "test" / TEST_TIMESTAMP
 VALIDATION_DIR = TEST_DIR / "validation"
 RUN_DIR = TEST_DIR / "run"
+TEST_LOG_DIR = TEST_DIR / "logs"
 SCRIPT_PATH = BASE_DIR / "scripts" / "optrack_incremental.sh"
 
+# Print test directory for user reference
+print(f"\nTest output will be stored in: {TEST_DIR}\n")
+
 # Configure logging
+# Create log file in test log directory
+log_file = TEST_LOG_DIR / "test_run.log"
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.StreamHandler(sys.stdout)
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(log_file)
     ]
 )
 logger = logging.getLogger("test_grant_detection")
 
 def setup_test_directories():
-    """Set up clean test directories."""
-    # Clean up existing test directories
-    for dir_path in [VALIDATION_DIR, RUN_DIR]:
-        if dir_path.exists():
-            shutil.rmtree(dir_path)
+    """Set up clean test directories with timestamped structure."""
+    # Create main test directories
+    for dir_path in [TEST_DIR, VALIDATION_DIR, RUN_DIR, TEST_LOG_DIR]:
         dir_path.mkdir(exist_ok=True, parents=True)
-    
-    logger.info(f"Created test directories: {VALIDATION_DIR}, {RUN_DIR}")
+
+    logger.info(f"Created test directory structure at {TEST_DIR}")
 
 def create_validation_data(site_name, num_to_skip=1, max_items=None, add_archived=True):
     """
@@ -657,12 +666,23 @@ def main():
             for line in site_summary:
                 logger.info(line)
 
-            # Write site-specific summary
+            # Write site-specific summary to both run dir and log dir
             site_run_dir = RUN_DIR / site
+            site_log_dir = TEST_LOG_DIR / site
+
+            # Create site log directory if it doesn't exist
+            site_log_dir.mkdir(exist_ok=True, parents=True)
+
+            # Write summary to run directory
             if site_run_dir.exists():
-                site_summary_path = site_run_dir / "test_summary.txt"
-                with open(site_summary_path, "w") as f:
+                site_run_summary_path = site_run_dir / "test_summary.txt"
+                with open(site_run_summary_path, "w") as f:
                     f.write("\n".join(site_summary))
+
+            # Write summary to log directory
+            site_log_summary_path = site_log_dir / "test_summary.txt"
+            with open(site_log_summary_path, "w") as f:
+                f.write("\n".join(site_summary))
         else:
             logger.info(f"{site}: {status} (no test details available)")
             summary_lines.append(f"{site}: {status} (no test details available)")
@@ -693,8 +713,8 @@ def main():
         summary_lines.append(fail_msg)
         logger.error(fail_msg)
 
-    # Write overall summary to file
-    summary_file = TEST_DIR / "test_summary.txt"
+    # Write overall summary to file in the logs directory
+    summary_file = TEST_LOG_DIR / "test_summary.txt"
     with open(summary_file, "w") as f:
         f.write("\n".join(summary_lines))
     logger.info(f"Test summary saved to {summary_file}")
@@ -702,6 +722,7 @@ def main():
     # Also create JSON summary
     summary_json = {
         "timestamp": datetime.now().isoformat(),
+        "test_directory": str(TEST_DIR),
         "sites_tested": len(results),
         "passed": passed_count,
         "failed": len(results) - passed_count,
@@ -710,7 +731,7 @@ def main():
         "details": test_details
     }
 
-    json_summary_file = TEST_DIR / "test_summary.json"
+    json_summary_file = TEST_LOG_DIR / "test_summary.json"
     with open(json_summary_file, "w") as f:
         json.dump(summary_json, f, indent=2)
     logger.info(f"JSON summary saved to {json_summary_file}")
