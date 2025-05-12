@@ -2,7 +2,7 @@ name: Deploy Dashboard
 
 on:
   push:
-    branches: [ main ]
+    branches: [ auto-updates ]
     paths:
       - 'website/**'
       - '.github/workflows/deploy-website.yml'
@@ -30,7 +30,7 @@ jobs:
           
       - name: Generate fresh statistics
         run: |
-          python core/stats.py --json > website/public/stats-data.json
+          python core/stats.py --json > website/public/sample-data.json
           
       - name: Set up Node.js
         uses: actions/setup-node@v3
