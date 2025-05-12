@@ -88,12 +88,32 @@ All Python commands should be run within the activated virtual environment. Neve
 ## Development Workflow
 1. Use `test_scraper.py` to validate changes to scraper components
 2. Use `test_shell_scripts.py` to test shell script functionality with all websites
-3. Clean up with `purge_tests.py` when done testing
-4. Run `login_and_save_cookies.py` when cookies expire
-5. Use the shell scripts for production runs:
+3. For changes to the ID tracking and comparison logic, use `test_id_comparison.py`
+4. Clean up with `purge_tests.py` when done testing
+5. Run `login_and_save_cookies.py` when cookies expire
+6. Use the shell scripts for production runs:
    - `optrack_incremental.sh` for regular updates (preserves existing data)
    - `optrack_full.sh` for complete rebuilds (overwrites existing data)
-6. Use `json_converter.py` for final data preparation as CSV if needed
+7. Use `json_converter.py` for final data preparation as CSV if needed
+
+### Branch Management for Testing
+When testing changes that affect the automated flow using the `auto-updates` branch:
+
+1. Make and test changes on the `main` branch first
+2. Run tests to verify functionality (`test_shell_scripts.py`, `test_id_comparison.py`)
+3. Ensure proper virtual environment activation with `source venv/bin/activate` before running tests
+4. Once verified, merge changes to the `auto-updates` branch:
+   ```bash
+   git checkout auto-updates
+   git merge main
+   ```
+5. Test again on `auto-updates` branch to ensure everything works properly
+6. Switch back to main branch when done:
+   ```bash
+   git checkout main
+   ```
+
+This ensures that any script modifications properly propagate to the branch that runs automated jobs.
 
 ## Cron Job Setup
 For automated scraping, use the shell scripts:
