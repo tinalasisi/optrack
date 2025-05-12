@@ -38,11 +38,12 @@ from selenium import webdriver
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.remote.webdriver import WebDriver
 
-# Import source tracking utilities
+# Import project utilities
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 from core.source_tracker import SeenIDsTracker, load_seen_ids, save_seen_ids
+from core.append_store import AppendStore  # Import the new AppendStore class
 
 POPUP_DISMISSED = False  # cache so we do not repeatedly search once handled
 
@@ -322,110 +323,117 @@ def extract_long_description(dsoup: BeautifulSoup) -> str:
 # ------------------------------------------------------------------
 # Database management
 # ------------------------------------------------------------------
-class SiteDatabase:
-    """Manages site-specific grant databases."""
-    
+class SiteDatabase(AppendStore):
+    """
+    Manages site-specific grant databases using the append-only storage.
+    This version inherits from AppendStore for efficient storage.
+
+    For backward compatibility, it also maintains the legacy JSON format.
+    """
+
     def __init__(self, site_name: str, is_test: bool = False):
-        self.site_name = site_name
+        # Initialize the underlying AppendStore
+        super().__init__(site_name=site_name, is_test=is_test)
+
+        # Set up paths for CSV
         self.output_dir = OUTPUT_TEST_DIR if is_test else OUTPUT_DB_DIR
-        self.db_path = self.output_dir / DATABASE_PATTERN.format(site=site_name)
         self.csv_path = self.output_dir / CSV_PATTERN.format(site=site_name)
-        self.grants: Dict[str, Dict[str, Any]] = {}
-        self.load()
-    
+
+        # For compatibility with existing code that expects grants dictionary
+        self.grants = {}
+
+        # Load all grants into memory only when explicitly requested
+        # This is not done by default to save memory
+
     def load(self) -> None:
-        """Load the site-specific database from disk."""
-        if not self.db_path.exists():
-            logger.info(f"No existing database found at {self.db_path}")
-            self.grants = {}
-            return
-        
-        try:
-            with open(self.db_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                self.grants = data.get("grants", {})
-            logger.info(f"Loaded {len(self.grants)} grants from {self.site_name} database")
-        except Exception as e:
-            logger.error(f"Error loading database for {self.site_name}: {e}")
-            self.grants = {}
-    
+        """
+        Load the database into memory.
+        This is only used for backward compatibility with code that expects
+        the grants dictionary to be available.
+        """
+        # Get all IDs from the index
+        grant_ids = self.get_all_ids()
+
+        # Load each grant
+        self.grants = {}
+        for grant_id in grant_ids:
+            grant = self.get_grant(grant_id)
+            if grant:
+                self.grants[grant_id] = grant
+
+        logger.info(f"Loaded {len(self.grants)} grants from {self.site_name} database into memory")
+
     def save(self) -> None:
-        """Save the database to disk."""
-        # Ensure the output directory exists
-        self.output_dir.mkdir(exist_ok=True, parents=True)
-        
-        data = {
-            "site": self.site_name,
-            "grants": self.grants,
-            "last_updated": datetime.now().isoformat(),
-            "count": len(self.grants)
-        }
-        
-        # Save JSON database
-        with open(self.db_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-        
+        """
+        Save the database to disk.
+        In the append-only model, this exports to the legacy JSON format
+        and saves the CSV.
+        """
+        # Export to legacy JSON format
+        self.export_to_json()
+
         # Save CSV version with clean format
         try:
             self.save_csv()
         except Exception as e:
             logger.warning(f"Could not save CSV: {e}")
-        
-        logger.info(f"Saved {len(self.grants)} grants to {self.site_name} database")
-    
+
     def save_csv(self) -> None:
         """Save a clean CSV version of the database."""
         import pandas as pd
-        
+
+        # Get all IDs
+        grant_ids = self.get_all_ids()
+
         # Extract consistent fields, keep details as JSON
         records = []
-        for grant_id, grant in self.grants.items():
+        for grant_id in grant_ids:
+            grant = self.get_grant(grant_id)
+            if not grant:
+                continue
+
             # Collect all extra fields into a details object
             details = {}
             for k, v in grant.items():
                 if k not in ['title', 'url', 'id', 'site', 'description_full']:
                     details[k] = v
-            
+
             # Create a clean record with proper encoding to prevent CSV issues
             record = {
                 'title': grant.get('title', '').replace('\n', ' '),
-                'url': grant.get('url', ''),
-                'id': grant.get('id', ''),
+                'url': grant.get('link', grant.get('url', '')),
+                'id': grant.get('competition_id', grant.get('id', '')),
                 'site': self.site_name,
                 'description': grant.get('description_full', '').strip().replace('\n', ' '),
                 # JSON-encode with ensure_ascii to prevent encoding issues
                 'details_json': json.dumps(details, ensure_ascii=True)
             }
             records.append(record)
-        
+
         # Create the CSV with proper quoting to handle embedded newlines and commas
         import csv  # For CSV constants
         df = pd.DataFrame(records)
         df.to_csv(self.csv_path, index=False, quoting=csv.QUOTE_ALL, escapechar='\\', doublequote=False)
         logger.info(f"Also saved CSV version to {self.csv_path}")
-    
+
     def update_from_scrape(self, scraped_records: List[Dict[str, Any]]) -> None:
-        """Update the database with newly scraped records."""
-        new_count = 0
-        
-        for record in scraped_records:
-            competition_id = record.get("competition_id", "")
-            if not competition_id:
-                continue
-                
-            if competition_id not in self.grants:
-                # This is a new grant, add it
-                self.grants[competition_id] = record
-                new_count += 1
-            else:
-                # Update existing grant with any new information
-                self.grants[competition_id].update(record)
-        
+        """
+        Update the database with newly scraped records.
+        Uses the more efficient append-only storage.
+        """
+        # Use the AppendStore implementation
+        new_count = super().update_from_scrape(scraped_records)
+
+        # If new grants were added, also save the CSV
         if new_count > 0:
-            logger.info(f"Added {new_count} new grants to {self.site_name} database")
-            self.save()
-        else:
-            logger.info(f"No new grants added to {self.site_name} database")
+            # Save CSV version
+            try:
+                self.save_csv()
+            except Exception as e:
+                logger.warning(f"Could not save CSV: {e}")
+
+            # Also export to legacy format for compatibility
+            self.export_to_json()
 
 # ------------------------------------------------------------------
 # History management for incremental scraping
@@ -556,15 +564,15 @@ def scrape_all(
     
     # Load database to check which IDs we already have details for
     db = SiteDatabase(site_name=site_name, is_test=False)
-    db_ids = set(db.grants.keys())
+    db_ids = db.get_all_ids()  # Use the new method that doesn't load everything into memory
     logger.info(f"Loaded {len(db_ids)} existing grants in the database for site '{site_name}'")
-    
+
     # Handle incremental mode
     ids_seen_this_run = set()
     if incremental and seen_ids is None:
         seen_ids = load_seen_ids(source=site_name)
         logger.info(f"Incremental mode: loaded {len(seen_ids)} previously seen competition IDs for site '{site_name}'")
-    
+
     # Identify IDs that we've seen but don't have details for
     missing_ids = set()
     if incremental and seen_ids:
@@ -600,7 +608,7 @@ def scrape_all(
                     logger.info(f"Processing competition ID: {comp_id}")
                     
                     # Skip if we've seen this ID before AND have its details in the database
-                    if incremental and seen_ids and comp_id in seen_ids and comp_id in db_ids:
+                    if incremental and seen_ids and comp_id in seen_ids and db.has_id(comp_id):
                         logger.info(f"Skipping {comp_id} - already in database")
                         continue
                     
@@ -654,7 +662,7 @@ def scrape_all(
                     comp_id = a.get("competitionid", "")
                     
                     # Skip if we've seen this ID before AND have its details in the database
-                    if incremental and seen_ids and comp_id in seen_ids and comp_id in db_ids:
+                    if incremental and seen_ids and comp_id in seen_ids and db.has_id(comp_id):
                         continue
                     
                     # Record this ID as seen in this run
@@ -882,6 +890,11 @@ def main() -> None:
         action="store_true",
         help="Run browser in visible mode (not headless) - useful for troubleshooting"
     )
+    parser.add_argument(
+        "--compact",
+        action="store_true",
+        help="Compact the database files to optimize storage (run periodically)"
+    )
     args = parser.parse_args()
 
     # Load config file
@@ -950,7 +963,22 @@ def main() -> None:
     max_items = args.max_items if args.max_items is not None else defaults.get("max_items")
     incremental = args.incremental  # Default is now non-incremental; explicit flag to enable
     output_dir = args.output_dir or defaults.get("output_dir", "output/db")
-    
+
+    # Handle database compaction if requested
+    if args.compact:
+        logger.info("Running database compaction...")
+        for site in websites_to_scrape:
+            site_name = site.get("name")
+            if site_name:
+                logger.info(f"Compacting database for {site_name}...")
+                db = SiteDatabase(site_name=site_name, is_test=False)
+                if db.compact():
+                    logger.info(f"Successfully compacted database for {site_name}")
+                else:
+                    logger.error(f"Failed to compact database for {site_name}")
+        logger.info("Compaction complete!")
+        return
+
     # Get list of base URLs
     bases = [site.get("url") for site in websites_to_scrape]
 

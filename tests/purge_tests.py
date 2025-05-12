@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 """
-Utility to purge test files created by test_scraper.py.
-
-This script removes the output/test directory and all its contents.
+This script removes all contents within the output/test directory while preserving the parent directory itself.
 """
 import shutil
 import os
@@ -16,7 +14,7 @@ OUTPUT_DB_DIR = OUTPUT_DIR / "db"
 TEST_DIR = OUTPUT_DIR / "test"
 
 def purge_test_files(args):
-    """Remove test files and directory."""
+    """Remove all test files and subdirectories while preserving the parent test directory."""
     if not TEST_DIR.exists():
         print(f"✅ No test directory found at {TEST_DIR}")
         return
@@ -39,12 +37,17 @@ def purge_test_files(args):
             print("Operation cancelled.")
             return
     
-    # Remove the directory and its contents
+    # Remove all contents but preserve the parent directory
     try:
-        shutil.rmtree(TEST_DIR)
-        print(f"✅ Successfully removed {file_count} test files and directory {TEST_DIR}")
+        # Remove all contents but keep the parent directory
+        for item in TEST_DIR.iterdir():
+            if item.is_file():
+                item.unlink()
+            elif item.is_dir():
+                shutil.rmtree(item)
+        print(f"✅ Successfully removed test files and subdirectories from {TEST_DIR}")
     except Exception as e:
-        print(f"❌ Error removing test directory: {e}")
+        print(f"❌ Error removing test directory contents: {e}")
 
 def main():
     parser = argparse.ArgumentParser(description="Purge test files created by test_scraper.py")

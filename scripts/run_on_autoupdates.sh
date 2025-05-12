@@ -89,13 +89,18 @@ echo "🔄 Switching to '$UPDATES_BRANCH' branch"
 git checkout "$UPDATES_BRANCH"
 
 # Create branch-specific log directories to prevent merge conflicts
-LOG_BASE_DIR="$REPO_ROOT/logs"
-RUNS_DIR="$LOG_BASE_DIR/scheduled_runs/$UPDATES_BRANCH"
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+OUTPUT_DIR="$REPO_ROOT/output"
+LOG_BASE_DIR="$OUTPUT_DIR/logs"
+RUNS_DIR="$LOG_BASE_DIR/runs/$TIMESTAMP"
 MERGE_DIR="$LOG_BASE_DIR/merge_logs/$UPDATES_BRANCH"
 mkdir -p "$RUNS_DIR" "$MERGE_DIR"
 
-# Timestamp for log files
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+# Create branch-specific subdir in the runs directory
+BRANCH_LOG_DIR="$RUNS_DIR/$UPDATES_BRANCH"
+mkdir -p "$BRANCH_LOG_DIR"
+
+# Set log file paths
 MERGE_LOG_FILE="$MERGE_DIR/merge_${TIMESTAMP}.log"
 
 # Make sure auto-updates is up to date with origin and the source branch
@@ -180,8 +185,8 @@ if git remote -v | grep -q origin; then
   fi
 fi
 
-# Create a log entry at the beginning of the run - use branch-specific log directory to prevent merge conflicts
-LOG_FILE="$RUNS_DIR/run_${TIMESTAMP}.log"
+# Create a log entry at the beginning of the run - use the consolidated timestamped directory structure
+LOG_FILE="$RUNS_DIR/run_summary.log"
 START_TIME=$(date +"%Y-%m-%d %H:%M:%S")
 
 # Prepare the log content with start time
@@ -202,8 +207,10 @@ git commit -m "Start OpTrack scan on $(date +"%Y-%m-%d")"
 
 # Run the incremental script directly on auto-updates branch
 echo "🔍 Running OpTrack incremental scan on '$UPDATES_BRANCH' branch"
-# Pass OPTRACK_LOG_FILE env variable to prevent duplicate log creation
+# Pass both LOG_FILE and TIMESTAMP to prevent duplicate log creation
+# and ensure both scripts use the same timestamped directory
 export OPTRACK_LOG_FILE="$LOG_FILE"
+export OPTRACK_RUN_TIMESTAMP="$TIMESTAMP"
 "$REPO_ROOT/scripts/optrack_incremental.sh"
 
 # Update the log with end time
