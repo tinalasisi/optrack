@@ -12,6 +12,7 @@ A comprehensive system for tracking funding opportunities from multiple sources,
 - **Rate‑limited polite requests** and custom User‑Agent header to avoid overwhelming servers.
 - **Clean output organization** with JSON and standardized CSV format for easy analysis.
 - **Database compaction** to optimize storage periodically.
+- **Detailed database statistics** with reporting in multiple formats (text, JSON, CSV).
 - **Automated monitoring** with shell scripts for scheduling through cron jobs.
 - **Testing infrastructure** for safe development and validation.
 - **Simplified directory structure** with separate `/output/db/` and `/output/test/` folders.
@@ -36,7 +37,8 @@ optrack/
 ├── core/
 │   ├── login_and_save_cookies.py   # Selenium login & cookie saver
 │   ├── source_tracker.py           # Source-specific ID tracking
-│   └── append_store.py             # Efficient append-only storage implementation
+│   ├── append_store.py             # Efficient append-only storage implementation
+│   └── stats.py                    # Database statistics and reporting
 ├── scripts/
 │   ├── optrack_full.sh             # Full database rebuild script
 │   ├── optrack_incremental.sh      # Incremental update script
@@ -215,7 +217,7 @@ OpTrack maintains one database file and CSV per source, which are automatically 
 # Update the umich database
 python utils/scrape_grants.py --site umich --incremental
 
-# Update the umms database 
+# Update the umms database
 python utils/scrape_grants.py --site umms --incremental
 
 # Update multiple source databases at once (based on websites.json)
@@ -224,7 +226,43 @@ python scripts/optrack_incremental.sh
 # Convert databases to CSV
 python utils/json_converter.py --site umich
 python utils/json_converter.py --site umms
+
+# Get database statistics in various formats
+python core/stats.py                   # Text format (default)
+python core/stats.py --json            # JSON format
+python core/stats.py --output csv      # CSV format
+python core/stats.py --site umich      # Filter to specific site
+python core/stats.py --test            # Get stats for test environment
 ```
+
+#### Database Statistics
+
+Get detailed information about your databases with the `stats.py` script:
+
+```bash
+# Get overall statistics for all sites
+python core/stats.py
+
+# Get statistics for a specific site
+python core/stats.py --site umich
+
+# Output in JSON format (good for programmatic use)
+python core/stats.py --json
+
+# Output in CSV format (good for spreadsheets)
+python core/stats.py --output csv
+
+# Get statistics for test environment
+python core/stats.py --test
+```
+
+The statistics include:
+- Total grants per source
+- Count of seen IDs vs grants with details
+- Storage usage metrics (file sizes)
+- Storage format (legacy vs append-only)
+- Last updated timestamps
+- Pending details (IDs seen but not yet in database)
 
 You can also perform fast scans which only check for new IDs without fetching details:
 

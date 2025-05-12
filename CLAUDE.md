@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Track IDs**: `python core/source_tracker.py [--list] [--source SITE] [--list-ids]` (source-specific ID tracking)
 - **Convert**: `python utils/json_converter.py [--site SITE] [--output-dir DIR]` (CSV conversion)
 - **Compact**: `python utils/scrape_grants.py --site SITE --compact` (optimize storage)
+- **Stats**: `python core/stats.py [--site SITE] [--output FORMAT] [--json] [--test]` (database statistics)
 
 ### Testing Commands
 - **Test Components**: `python tests/test_scraper.py [--items N] [--base-url URL]`
@@ -85,6 +86,11 @@ All Python commands should be run within the activated virtual environment. Neve
 - `core/source_tracker.py`: Manages seen competition IDs for each source separately
   - Provides CLI for listing sources and IDs
   - Creates and maintains source-specific tracking files
+- `core/stats.py`: Provides detailed database statistics
+  - Reports grant counts, seen IDs, and pending details
+  - Shows storage metrics (file sizes, formats)
+  - Supports multiple output formats (text, CSV, JSON)
+  - Works with both production and test environments
 - `utils/json_converter.py`: Converts JSON databases to properly formatted CSVs
   - Handles special characters and newlines correctly
   - Can convert site-specific databases directly with `--site` flag
@@ -110,7 +116,9 @@ All Python commands should be run within the activated virtual environment. Neve
    - `optrack_full.sh` for complete rebuilds (overwrites existing data)
 7. Run database compaction periodically to optimize storage:
    - `python utils/scrape_grants.py --site SITE --compact`
-8. Use `json_converter.py` for final data preparation as CSV if needed
+8. Monitor database statistics to track progress and identify issues:
+   - `python core/stats.py [--site SITE] [--output FORMAT]`
+9. Use `json_converter.py` for final data preparation as CSV if needed
 
 ### Branch Management for Testing
 When testing changes that affect the automated flow using the `auto-updates` branch:
