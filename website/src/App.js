@@ -30,23 +30,34 @@ function App() {
     async function fetchData() {
       try {
         // Create a dynamic path that works for both local and GitHub Pages deployment
-        // This will look for sample-data.json in the root of the deployment
+        // Add a timestamp to prevent browser caching
+        const timestamp = new Date().getTime();
         const pathPrefix = process.env.PUBLIC_URL || '';
-        const response = await fetch(`${pathPrefix}/sample-data.json`);
+        console.log('Fetching from:', `${pathPrefix}/sample-data.json?v=${timestamp}`);
+
+        const response = await fetch(`${pathPrefix}/sample-data.json?v=${timestamp}`);
+
         if (!response.ok) {
+          console.error('First fetch attempt failed, trying fallback');
           // If that fails, try the relative path as fallback
-          const fallbackResponse = await fetch('./sample-data.json');
+          const fallbackResponse = await fetch(`./sample-data.json?v=${timestamp}`);
+
           if (!fallbackResponse.ok) {
             throw new Error(`HTTP error! status: ${fallbackResponse.status}`);
           }
+
           const fallbackResult = await fallbackResponse.json();
+          console.log('Fallback data:', fallbackResult);
           setData(fallbackResult);
           return setLoading(false);
         }
+
         const result = await response.json();
+        console.log('Data loaded successfully:', result);
         setData(result);
         setLoading(false);
       } catch (e) {
+        console.error('Error loading data:', e);
         setError(`Error loading data: ${e.message}`);
         setLoading(false);
       }
