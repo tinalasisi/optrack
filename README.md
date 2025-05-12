@@ -2,14 +2,20 @@
 
 A comprehensive system for tracking funding opportunities from multiple sources, focusing on U-M InfoReady portal grants.
 
+[![Dashboard](https://img.shields.io/badge/Live-Dashboard-blue)](https://tinalasisi.github.io/optrack/)
+
 ## Features
 - **Interactive login flow** using Selenium with Duo support, then hand‑off cookies to `requests` for faster scraping.
 - **Multi-source tracking** with unified database for grants from different portals.
+- **Efficient append-only storage** that only writes new grants without rewriting entire files.
 - **Graceful fallback** to Selenium when APIs are unavailable or cookies are invalid.
 - **Incremental scraping** that only fetches new grants not already in the database.
 - **Configurable selectors** for any table or card‑based listing.
 - **Rate‑limited polite requests** and custom User‑Agent header to avoid overwhelming servers.
 - **Clean output organization** with JSON and standardized CSV format for easy analysis.
+- **Database compaction** to optimize storage periodically.
+- **Detailed database statistics** with reporting in multiple formats (text, JSON, CSV).
+- **Live dashboard** showing current database statistics and metrics.
 - **Automated monitoring** with shell scripts for scheduling through cron jobs.
 - **Testing infrastructure** for safe development and validation.
 - **Simplified directory structure** with separate `/output/db/` and `/output/test/` folders.
@@ -33,7 +39,9 @@ python utils/json_converter.py --site umich              # convert to CSV
 optrack/
 ├── core/
 │   ├── login_and_save_cookies.py   # Selenium login & cookie saver
-│   └── source_tracker.py           # Source-specific ID tracking
+│   ├── source_tracker.py           # Source-specific ID tracking
+│   ├── append_store.py             # Efficient append-only storage implementation
+│   └── stats.py                    # Database statistics and reporting
 ├── scripts/
 │   ├── optrack_full.sh             # Full database rebuild script
 │   ├── optrack_incremental.sh      # Incremental update script
@@ -50,13 +58,23 @@ optrack/
 │   └── (for cookies and website configuration files)
 ├── output/
 │   ├── db/                         # Main production database files
-│   │   ├── {site}_grants.json      # Site-specific grant databases
+│   │   ├── {site}_grants_data.jsonl      # Append-only data file (one grant per line)
+│   │   ├── {site}_grants_index.json      # Index mapping IDs to positions in data file
+│   │   ├── {site}_grants.json      # Legacy format database (for compatibility)
 │   │   ├── {site}_grants.csv       # CSV export for each site
 │   │   ├── {site}_seen_competitions.json  # Site-specific ID tracking
 │   │   ├── grant_summary.txt       # Database summary report
 │   │   └── scan_log.txt            # Scan operations log
 │   └── test/                       # Test output directory
 │       └── (all test files isolated here)
+├── website/                        # Dashboard web application
+│   ├── src/                        # React source code
+│   ├── public/                     # Static files and data
+│   ├── update-stats.sh             # Script to update dashboard data
+│   └── package.json                # Dashboard dependencies
+├── .github/
+│   └── workflows/                  # GitHub Actions workflows
+│       └── deploy-website.yml      # Dashboard deployment workflow
 ├── README.md                       # Project documentation
 ├── requirements.txt                # Pinned dependencies
 └── CHANGELOG.md                    # Version history
@@ -81,15 +99,21 @@ python core/source_tracker.py --list-ids --source umich
 
 # Convert JSON to CSV
 python utils/json_converter.py --site umich
+
+# Optimize storage with database compaction
+python utils/scrape_grants.py --site umich --compact
 ```
 
 #### How it works
 
-1. Maintains source-specific databases in `output/db/{site}_grants.json`
-2. Uses source-specific ID tracking in `output/db/{site}_seen_competitions.json`
-3. Only downloads details for grants not already in the database
-4. Creates standardized CSV exports of each database
-5. Tracks source information for each grant for better organization
+1. Uses efficient append-only storage in `output/db/{site}_grants_data.jsonl`
+2. Maintains fast index lookup in `output/db/{site}_grants_index.json`
+3. Preserves legacy format in `output/db/{site}_grants.json` for compatibility
+4. Uses source-specific ID tracking in `output/db/{site}_seen_competitions.json`
+5. Only downloads details for grants not already in the database
+6. Creates standardized CSV exports of each database
+7. Tracks source information for each grant for better organization
+8. Periodically compacts storage to optimize file size
 
 #### Multi-Source Support
 
@@ -191,6 +215,9 @@ python utils/scrape_grants.py --site umich --batch-size 10
 
 # Change output directory
 python utils/scrape_grants.py --site umich --output-dir custom-output
+
+# Optimize storage (run periodically)
+python utils/scrape_grants.py --site umich --compact
 ```
 
 ### Data Management
@@ -201,7 +228,7 @@ OpTrack maintains one database file and CSV per source, which are automatically 
 # Update the umich database
 python utils/scrape_grants.py --site umich --incremental
 
-# Update the umms database 
+# Update the umms database
 python utils/scrape_grants.py --site umms --incremental
 
 # Update multiple source databases at once (based on websites.json)
@@ -210,7 +237,43 @@ python scripts/optrack_incremental.sh
 # Convert databases to CSV
 python utils/json_converter.py --site umich
 python utils/json_converter.py --site umms
+
+# Get database statistics in various formats
+python core/stats.py                   # Text format (default)
+python core/stats.py --json            # JSON format
+python core/stats.py --output csv      # CSV format
+python core/stats.py --site umich      # Filter to specific site
+python core/stats.py --test            # Get stats for test environment
 ```
+
+#### Database Statistics
+
+Get detailed information about your databases with the `stats.py` script:
+
+```bash
+# Get overall statistics for all sites
+python core/stats.py
+
+# Get statistics for a specific site
+python core/stats.py --site umich
+
+# Output in JSON format (good for programmatic use)
+python core/stats.py --json
+
+# Output in CSV format (good for spreadsheets)
+python core/stats.py --output csv
+
+# Get statistics for test environment
+python core/stats.py --test
+```
+
+The statistics include:
+- Total grants per source
+- Count of seen IDs vs grants with details
+- Storage usage metrics (file sizes)
+- Storage format (legacy vs append-only)
+- Last updated timestamps
+- Pending details (IDs seen but not yet in database)
 
 You can also perform fast scans which only check for new IDs without fetching details:
 
@@ -443,6 +506,32 @@ This isolated test environment ensures that test runs won't affect your producti
 - Handles missing or corrupt cookie files gracefully
 - Falls back to Selenium when JSON API is unavailable
 - Provides detailed error messages for troubleshooting
+
+## Dashboard
+
+OpTrack includes a live dashboard that displays current database statistics:
+
+![OpTrack Dashboard](https://tinalasisi.github.io/optrack/dashboard-preview.png)
+
+The dashboard shows:
+- Total grants collected across all sources
+- Count of seen IDs and pending details
+- Per-source statistics and storage metrics
+- Last updated timestamps
+- Storage distribution visualizations
+
+### Accessing the Dashboard
+
+The dashboard is available at: [https://tinalasisi.github.io/optrack/](https://tinalasisi.github.io/optrack/)
+
+### Updating the Dashboard
+
+The dashboard is automatically updated when changes are pushed to the main branch. You can also update it manually:
+
+```bash
+# Generate fresh statistics and rebuild the dashboard
+./website/update-stats.sh
+```
 
 ## License
 MIT

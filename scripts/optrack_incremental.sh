@@ -245,31 +245,47 @@ for site in websites:
     
     print(f\"Completed processing {site_name}\")
     
-# Generate summary
+# Generate summary using the stats.py script
 summary_file = f'{output_dir}/grant_summary.txt'
-with open(summary_file, 'w') as summary:
-    summary.write(f\"Database Summary - {timestamp}\\n\")
-    summary.write(\"-\" * 50 + \"\\n\")
 
-    # Count entries in each database
-    for site in config['websites']:
-        if (not site_filter or site.get('name') == site_filter) and site.get('enabled', True):
-            site_name = site['name']
-            db_file = f\"{output_dir}/{site_name}_grants.json\"
+# Run stats.py to generate detailed statistics
+try:
+    # First generate text output for the summary file
+    test_flag = '--test' if output_dir.endswith('/test') else ''
+    os.system(f'python core/stats.py {test_flag} > {summary_file}')
 
-            if os.path.exists(db_file):
-                # Count entries by counting competition_id occurrences
-                try:
-                    with open(db_file, 'r') as f:
-                        content = f.read()
-                        count = content.count('\"competition_id\"')
-                    summary.write(f\"{site_name}: {count} grants\\n\")
-                except Exception as e:
-                    summary.write(f\"{site_name}: Error reading database - {e}\\n\")
-            else:
-                summary.write(f\"{site_name}: No database file found\\n\")
+    # Also save JSON version for programmatic use
+    json_summary_file = f'{output_dir}/grant_summary.json'
+    os.system(f'python core/stats.py {test_flag} --json > {json_summary_file}')
 
-    summary.write(\"-\" * 50 + \"\\n\")
+    print(f\"Generated statistics with core/stats.py - see {summary_file}\")
+except Exception as e:
+    # Fallback to old method if stats.py fails
+    with open(summary_file, 'w') as summary:
+        summary.write(f\"Database Summary - {timestamp}\\n\")
+        summary.write(\"-\" * 50 + \"\\n\")
+        summary.write(f\"Error running stats.py: {e}\\n\")
+        summary.write(\"-\" * 50 + \"\\n\")
+
+        # Count entries in each database
+        for site in config['websites']:
+            if (not site_filter or site.get('name') == site_filter) and site.get('enabled', True):
+                site_name = site['name']
+                db_file = f\"{output_dir}/{site_name}_grants.json\"
+
+                if os.path.exists(db_file):
+                    # Count entries by counting competition_id occurrences
+                    try:
+                        with open(db_file, 'r') as f:
+                            content = f.read()
+                            count = content.count('\"competition_id\"')
+                        summary.write(f\"{site_name}: {count} grants\\n\")
+                    except Exception as e:
+                        summary.write(f\"{site_name}: Error reading database - {e}\\n\")
+                else:
+                    summary.write(f\"{site_name}: No database file found\\n\")
+
+        summary.write(\"-\" * 50 + \"\\n\")
 
 "
 

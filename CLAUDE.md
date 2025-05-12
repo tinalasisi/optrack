@@ -8,6 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Scrape**: `python utils/scrape_grants.py [--site SITE] [--max-items N] [--incremental] [--batch-size N]`
 - **Track IDs**: `python core/source_tracker.py [--list] [--source SITE] [--list-ids]` (source-specific ID tracking)
 - **Convert**: `python utils/json_converter.py [--site SITE] [--output-dir DIR]` (CSV conversion)
+- **Compact**: `python utils/scrape_grants.py --site SITE --compact` (optimize storage)
+- **Stats**: `python core/stats.py [--site SITE] [--output FORMAT] [--json] [--test]` (database statistics)
 
 ### Testing Commands
 - **Test Components**: `python tests/test_scraper.py [--items N] [--base-url URL]`
@@ -32,8 +34,11 @@ All Python commands should be run within the activated virtual environment. Neve
 ## Architecture
 - **Source-specific databases**: Each source (e.g., umich, umms) has its own database and ID tracker
 - **Separated concerns**: Scraping, ID tracking, and CSV conversion are handled by separate scripts
-- **Database structure**: 
-  - `output/db/{site}_grants.json` - Site-specific grant database
+- **Efficient storage**: Append-only storage with index for fast lookups
+- **Database structure**:
+  - `output/db/{site}_grants_data.jsonl` - Append-only data file (one grant per line)
+  - `output/db/{site}_grants_index.json` - Index mapping IDs to positions in data file
+  - `output/db/{site}_grants.json` - Legacy format database (for compatibility)
   - `output/db/{site}_grants.csv` - CSV export of site-specific database
   - `output/db/{site}_seen_competitions.json` - List of seen competition IDs for each source
 
@@ -57,10 +62,13 @@ All Python commands should be run within the activated virtual environment. Neve
 - Session reuse with cookies is preferred over browser automation
 - Fall back to Selenium when APIs are unavailable
 - Always use proper rate limiting (`time.sleep`) between requests
-- Use JSON as primary storage format, with CSV for analysis
+- Use append-only JSONL for efficient storage with indexing
+- Maintain legacy JSON format for backward compatibility
+- Generate CSV files for analysis and data sharing
 - Isolate test activities to dedicated test directory
 - Source-specific tracking of seen competition IDs
 - Handle edge cases (missing cookies, timeout errors) gracefully
+- Periodically compact databases to optimize storage
 
 ## Script Behaviors
 - `utils/scrape_grants.py`: Main scraper with site-specific database support
@@ -68,9 +76,21 @@ All Python commands should be run within the activated virtual environment. Neve
   - Uses core/source_tracker.py for tracking seen competition IDs
   - Has fast-scan mode to quickly identify new grants without details
   - Supports batch processing for large sources
+  - Uses append-only storage with core/append_store.py
+  - Provides compaction feature for storage optimization
+- `core/append_store.py`: Efficient append-only storage implementation
+  - Handles appending new grants without rewriting entire files
+  - Maintains index for fast ID lookups
+  - Reduces memory usage with on-demand loading
+  - Preserves compatibility with existing JSON format
 - `core/source_tracker.py`: Manages seen competition IDs for each source separately
   - Provides CLI for listing sources and IDs
   - Creates and maintains source-specific tracking files
+- `core/stats.py`: Provides detailed database statistics
+  - Reports grant counts, seen IDs, and pending details
+  - Shows storage metrics (file sizes, formats)
+  - Supports multiple output formats (text, CSV, JSON)
+  - Works with both production and test environments
 - `utils/json_converter.py`: Converts JSON databases to properly formatted CSVs
   - Handles special characters and newlines correctly
   - Can convert site-specific databases directly with `--site` flag
@@ -94,7 +114,11 @@ All Python commands should be run within the activated virtual environment. Neve
 6. Use the shell scripts for production runs:
    - `optrack_incremental.sh` for regular updates (preserves existing data)
    - `optrack_full.sh` for complete rebuilds (overwrites existing data)
-7. Use `json_converter.py` for final data preparation as CSV if needed
+7. Run database compaction periodically to optimize storage:
+   - `python utils/scrape_grants.py --site SITE --compact`
+8. Monitor database statistics to track progress and identify issues:
+   - `python core/stats.py [--site SITE] [--output FORMAT]`
+9. Use `json_converter.py` for final data preparation as CSV if needed
 
 ### Branch Management for Testing
 When testing changes that affect the automated flow using the `auto-updates` branch:
