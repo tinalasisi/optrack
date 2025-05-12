@@ -5,11 +5,13 @@ A comprehensive system for tracking funding opportunities from multiple sources,
 ## Features
 - **Interactive login flow** using Selenium with Duo support, then hand‑off cookies to `requests` for faster scraping.
 - **Multi-source tracking** with unified database for grants from different portals.
+- **Efficient append-only storage** that only writes new grants without rewriting entire files.
 - **Graceful fallback** to Selenium when APIs are unavailable or cookies are invalid.
 - **Incremental scraping** that only fetches new grants not already in the database.
 - **Configurable selectors** for any table or card‑based listing.
 - **Rate‑limited polite requests** and custom User‑Agent header to avoid overwhelming servers.
 - **Clean output organization** with JSON and standardized CSV format for easy analysis.
+- **Database compaction** to optimize storage periodically.
 - **Automated monitoring** with shell scripts for scheduling through cron jobs.
 - **Testing infrastructure** for safe development and validation.
 - **Simplified directory structure** with separate `/output/db/` and `/output/test/` folders.
@@ -33,7 +35,8 @@ python utils/json_converter.py --site umich              # convert to CSV
 optrack/
 ├── core/
 │   ├── login_and_save_cookies.py   # Selenium login & cookie saver
-│   └── source_tracker.py           # Source-specific ID tracking
+│   ├── source_tracker.py           # Source-specific ID tracking
+│   └── append_store.py             # Efficient append-only storage implementation
 ├── scripts/
 │   ├── optrack_full.sh             # Full database rebuild script
 │   ├── optrack_incremental.sh      # Incremental update script
@@ -50,7 +53,9 @@ optrack/
 │   └── (for cookies and website configuration files)
 ├── output/
 │   ├── db/                         # Main production database files
-│   │   ├── {site}_grants.json      # Site-specific grant databases
+│   │   ├── {site}_grants_data.jsonl      # Append-only data file (one grant per line)
+│   │   ├── {site}_grants_index.json      # Index mapping IDs to positions in data file
+│   │   ├── {site}_grants.json      # Legacy format database (for compatibility)
 │   │   ├── {site}_grants.csv       # CSV export for each site
 │   │   ├── {site}_seen_competitions.json  # Site-specific ID tracking
 │   │   ├── grant_summary.txt       # Database summary report
@@ -81,15 +86,21 @@ python core/source_tracker.py --list-ids --source umich
 
 # Convert JSON to CSV
 python utils/json_converter.py --site umich
+
+# Optimize storage with database compaction
+python utils/scrape_grants.py --site umich --compact
 ```
 
 #### How it works
 
-1. Maintains source-specific databases in `output/db/{site}_grants.json`
-2. Uses source-specific ID tracking in `output/db/{site}_seen_competitions.json`
-3. Only downloads details for grants not already in the database
-4. Creates standardized CSV exports of each database
-5. Tracks source information for each grant for better organization
+1. Uses efficient append-only storage in `output/db/{site}_grants_data.jsonl`
+2. Maintains fast index lookup in `output/db/{site}_grants_index.json`
+3. Preserves legacy format in `output/db/{site}_grants.json` for compatibility
+4. Uses source-specific ID tracking in `output/db/{site}_seen_competitions.json`
+5. Only downloads details for grants not already in the database
+6. Creates standardized CSV exports of each database
+7. Tracks source information for each grant for better organization
+8. Periodically compacts storage to optimize file size
 
 #### Multi-Source Support
 
@@ -191,6 +202,9 @@ python utils/scrape_grants.py --site umich --batch-size 10
 
 # Change output directory
 python utils/scrape_grants.py --site umich --output-dir custom-output
+
+# Optimize storage (run periodically)
+python utils/scrape_grants.py --site umich --compact
 ```
 
 ### Data Management
