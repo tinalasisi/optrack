@@ -1,10 +1,10 @@
 {
   "files": {
-    "main.css": "/static/css/main.ef2d66f8.css",
-    "main.js": "/static/js/main.6cd4a25d.js",
-    "index.html": "/index.html",
-    "main.ef2d66f8.css.map": "/static/css/main.ef2d66f8.css.map",
-    "main.6cd4a25d.js.map": "/static/js/main.6cd4a25d.js.map"
+    "main.css": "/optrack/static/css/main.ef2d66f8.css",
+    "main.js": "/optrack/static/js/main.6cd4a25d.js",
+    "index.html": "/optrack/index.html",
+    "main.ef2d66f8.css.map": "/optrack/static/css/main.ef2d66f8.css.map",
+    "main.6cd4a25d.js.map": "/optrack/static/js/main.6cd4a25d.js.map"
   },
   "entrypoints": [
     "static/css/main.ef2d66f8.css",
