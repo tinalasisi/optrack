@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bar } from 'react-chartjs-2';
+import { Bar, Doughnut } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -8,12 +8,14 @@ import {
   Title,
   Tooltip,
   Legend,
+  ArcElement,
 } from 'chart.js';
 
 ChartJS.register(
   CategoryScale,
   LinearScale,
   BarElement,
+  ArcElement,
   Title,
   Tooltip,
   Legend
@@ -68,6 +70,10 @@ function App() {
           <div className="stat-label">Total Seen IDs</div>
         </div>
         <div className="stat-card">
+          <div className="stat-value">{data.summary.new_grants_last_pull || 0}</div>
+          <div className="stat-label">New Grants (Last Pull)</div>
+        </div>
+        <div className="stat-card">
           <div className="stat-value">{data.summary.pending_details}</div>
           <div className="stat-label">Pending Details</div>
         </div>
@@ -83,61 +89,121 @@ function App() {
           <div className="site-card" key={site.site}>
             <div className="site-header">
               <div className="site-name">{site.site}</div>
-              <div className="site-format">{site.storage_format}</div>
             </div>
             <div className="site-stats">
               <div className="site-stat">
                 <div className="site-stat-value">{site.grant_count}</div>
-                <div className="site-stat-label">Grants</div>
+                <div className="site-stat-label">Grants in DB</div>
               </div>
               <div className="site-stat">
                 <div className="site-stat-value">{site.seen_ids_count}</div>
                 <div className="site-stat-label">Seen IDs</div>
               </div>
               <div className="site-stat">
-                <div className="site-stat-value">{site.grants_without_details}</div>
-                <div className="site-stat-label">Pending</div>
+                <div className="site-stat-value">
+                  {site.latest_pull?.total_found || 0}
+                </div>
+                <div className="site-stat-label">Latest Pull Count</div>
               </div>
               <div className="site-stat">
                 <div className="site-stat-value">
-                  {Math.round(site.storage_stats.total_size / 1024 * 10) / 10}
+                  {site.latest_pull?.new_grants || 0}
                 </div>
-                <div className="site-stat-label">Size (MB)</div>
+                <div className="site-stat-label">New Grants</div>
               </div>
             </div>
-            <div className="storage-stats">
-              <div className="storage-title">Storage Distribution</div>
+            <div className="pull-stats">
+              <div className="pull-stats-title">Latest Pull Analysis</div>
               <div className="chart-container">
-                <Bar
+                <Doughnut
                   options={{
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
                       legend: {
-                        display: false,
+                        position: 'right',
                       },
                       title: {
                         display: false,
                       },
+                      tooltip: {
+                        callbacks: {
+                          label: function(context) {
+                            return ` ${context.label}: ${context.raw}`;
+                          }
+                        }
+                      }
                     },
                   }}
                   data={{
-                    labels: ['Legacy JSON', 'JSONL Data', 'Index', 'CSV'],
+                    labels: ['Grants in Database', 'New Grants Found'],
                     datasets: [
                       {
                         data: [
-                          site.storage_stats.legacy_json_size,
-                          site.storage_stats.jsonl_size,
-                          site.storage_stats.index_size,
-                          site.storage_stats.csv_size,
+                          site.grant_count,
+                          site.latest_pull?.new_grants || 0
                         ],
                         backgroundColor: [
-                          'rgba(255, 99, 132, 0.5)',
-                          'rgba(54, 162, 235, 0.5)',
-                          'rgba(255, 206, 86, 0.5)',
-                          'rgba(75, 192, 192, 0.5)',
+                          'rgba(54, 162, 235, 0.7)',
+                          'rgba(255, 99, 132, 0.7)'
                         ],
+                        borderColor: [
+                          'rgba(54, 162, 235, 1)',
+                          'rgba(255, 99, 132, 1)'
+                        ],
+                        borderWidth: 1,
                       },
+                    ],
+                  }}
+                />
+              </div>
+            </div>
+            <div className="pull-comparison">
+              <div className="pull-bar-container">
+                <Bar
+                  options={{
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                      x: {
+                        beginAtZero: true,
+                        stacked: false,
+                        grid: {
+                          display: false
+                        }
+                      },
+                      y: {
+                        stacked: false,
+                        grid: {
+                          display: false
+                        }
+                      }
+                    },
+                    plugins: {
+                      legend: {
+                        display: true,
+                        position: 'top',
+                      },
+                      title: {
+                        display: true,
+                        text: 'Database vs Latest Pull'
+                      }
+                    },
+                  }}
+                  data={{
+                    labels: ['Grants'],
+                    datasets: [
+                      {
+                        label: 'Grants in Database',
+                        data: [site.grant_count],
+                        backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                      },
+                      {
+                        label: 'Latest Pull Total',
+                        data: [site.latest_pull?.total_found || 0],
+                        backgroundColor: 'rgba(255, 159, 64, 0.7)',
+                      }
                     ],
                   }}
                 />

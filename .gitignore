@@ -82,3 +82,23 @@ Thumbs.db
 ehthumbs.db
 Icon?
 **/.claude/settings.local.json
+
+# -----------------------
+# Node.js / React
+# -----------------------
+node_modules/
+website/node_modules/
+/node_modules
+/.pnp
+.pnp.js
+/website/node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# React build artifacts
+/build
+/website/build
+.vercel
