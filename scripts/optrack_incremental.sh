@@ -58,13 +58,18 @@ if [ "$TEST_MODE" = true ]; then
   [ -n "$SITE" ] && echo "- Site: $SITE"
 fi
 
+# Create a log directory for this run with date and time
+RUN_TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+LOG_DIR="$REPO_PATH/logs/runs/$RUN_TIMESTAMP"
+mkdir -p "$LOG_DIR"
+
 # IMPORTANT: Capture grant IDs BEFORE scraping
 # Create a file to store the BEFORE counts for compatibility
-PREVIOUS_COUNTS_FILE="$REPO_PATH/before_counts.txt"
+PREVIOUS_COUNTS_FILE="$LOG_DIR/before_counts.txt"
 echo "# Grant counts BEFORE scraping $(date)" > "$PREVIOUS_COUNTS_FILE"
 
 # Also create a JSON file with all grant IDs for accurate comparison
-PREVIOUS_IDS_FILE="$REPO_PATH/before_ids.json"
+PREVIOUS_IDS_FILE="$LOG_DIR/before_ids.json"
 
 # Get all competition IDs from current databases
 python -c "
@@ -93,7 +98,7 @@ result = {}
 try:
     with open('data/websites.json') as f:
         config = json.load(f)
-        
+
     # Filter sites if specified
     site_filter = '$SITE'
     websites = config['websites']
@@ -101,26 +106,39 @@ try:
         websites = [site for site in websites if site.get('name') == site_filter and site.get('enabled', True)]
     else:
         websites = [site for site in websites if site.get('enabled', True)]
-    
+
     # Process each site
     for site in websites:
         site_name = site['name']
         db_file = \"$OUTPUT_DIR/{}_grants.json\".format(site_name)
-        
+
+        # Create source-specific log directory
+        site_log_dir = os.path.join('$LOG_DIR', site_name)
+        os.makedirs(site_log_dir, exist_ok=True)
+
         # Extract IDs from this site's database
         ids = extract_ids(db_file)
         result[site_name] = {
             'count': len(ids),
             'ids': ids
         }
-        
+
         # Also write to the counts file for backward compatibility
         print(f\"{site_name}: {len(ids)}\")
-        
-    # Save to JSON file
+
+        # Save site-specific before data
+        site_before_file = os.path.join(site_log_dir, 'before_ids.json')
+        with open(site_before_file, 'w') as f:
+            json.dump({
+                'count': len(ids),
+                'ids': ids,
+                'site': site_name
+            }, f, indent=2)
+
+    # Save combined results to the main before file
     with open('$PREVIOUS_IDS_FILE', 'w') as f:
         json.dump(result, f, indent=2)
-        
+
 except Exception as e:
     print(f\"ERROR: {e}\")
     # Create an empty JSON file to avoid errors later
@@ -129,6 +147,9 @@ except Exception as e:
 " >> "$PREVIOUS_COUNTS_FILE"
 
 # Read site information from websites.json and process each enabled site
+# Export LOG_DIR for use by Python script
+export LOG_DIR="$LOG_DIR"
+
 python -c "
 import json
 import os
@@ -208,16 +229,17 @@ for site in websites:
     print(f\"Completed processing {site_name}\")
     
 # Generate summary
-with open(f'{output_dir}/grant_summary.txt', 'w') as summary:
+summary_file = f'{output_dir}/grant_summary.txt'
+with open(summary_file, 'w') as summary:
     summary.write(f\"Database Summary - {timestamp}\\n\")
     summary.write(\"-\" * 50 + \"\\n\")
-    
+
     # Count entries in each database
     for site in config['websites']:
         if (not site_filter or site.get('name') == site_filter) and site.get('enabled', True):
             site_name = site['name']
             db_file = f\"{output_dir}/{site_name}_grants.json\"
-            
+
             if os.path.exists(db_file):
                 # Count entries by counting competition_id occurrences
                 try:
@@ -229,19 +251,24 @@ with open(f'{output_dir}/grant_summary.txt', 'w') as summary:
                     summary.write(f\"{site_name}: Error reading database - {e}\\n\")
             else:
                 summary.write(f\"{site_name}: No database file found\\n\")
-    
+
     summary.write(\"-\" * 50 + \"\\n\")
+
 "
 
 echo "==== OpTrack incremental scan completed at $(date) ====" >> $OUTPUT_DIR/scan_log.txt
 COMPLETION_TIME=$(date +"%Y-%m-%d %H:%M:%S")
+
+# Copy scan log and grant summary to the log directory
+cp "$OUTPUT_DIR/scan_log.txt" "$LOG_DIR/scan_log.txt"
+cp "$OUTPUT_DIR/grant_summary.txt" "$LOG_DIR/grant_summary.txt"
+
 echo "Scan complete. See $OUTPUT_DIR/grant_summary.txt for results."
+echo "Logs saved to $LOG_DIR"
 
 # Create a log entry only if not already provided by parent script
 if [ -z "$OPTRACK_LOG_FILE" ]; then
-  LOG_DIR="$REPO_PATH/logs/scheduled_runs"
-  LOG_FILE="$LOG_DIR/run_$(date +"%Y%m%d_%H%M%S").log"
-  mkdir -p "$LOG_DIR"
+  LOG_FILE="$LOG_DIR/run.log"
 
   # Prepare the log content
   {
@@ -270,7 +297,7 @@ fi
 # Only perform Git operations if not in test mode
 if [ "$TEST_MODE" = false ]; then
   # Create a file to store the AFTER database with all competition IDs
-  AFTER_IDS_FILE="$REPO_PATH/after_ids.json"
+  AFTER_IDS_FILE="$LOG_DIR/after_ids.json"
 
   # Get all competition IDs from current databases AFTER scraping
   python -c "
@@ -313,6 +340,10 @@ try:
         site_name = site['name']
         db_file = \"$OUTPUT_DIR/{}_grants.json\".format(site_name)
 
+        # Get the site-specific log directory
+        site_log_dir = os.path.join('$LOG_DIR', site_name)
+        os.makedirs(site_log_dir, exist_ok=True)
+
         # Extract IDs from this site's database
         ids = extract_ids(db_file)
         result[site_name] = {
@@ -320,7 +351,25 @@ try:
             'ids': ids
         }
 
-    # Save to JSON file
+        # Save site-specific after data
+        site_after_file = os.path.join(site_log_dir, 'after_ids.json')
+        with open(site_after_file, 'w') as f:
+            json.dump({
+                'count': len(ids),
+                'ids': ids,
+                'site': site_name
+            }, f, indent=2)
+
+        # Copy the database file for reference
+        try:
+            import shutil
+            if os.path.exists(db_file):
+                dest_db = os.path.join(site_log_dir, f\"{site_name}_grants.json\")
+                shutil.copy2(db_file, dest_db)
+        except Exception as e:
+            print(f\"Error copying database: {e}\", file=sys.stderr)
+
+    # Save combined results to the main after file
     with open('$AFTER_IDS_FILE', 'w') as f:
         json.dump(result, f, indent=2)
 
@@ -343,6 +392,7 @@ except Exception as e:
   python -c "
 import json
 import sys
+import os
 
 try:
     # Load before and after data
@@ -355,6 +405,10 @@ try:
     # Track total new grants
     new_grants_total = 0
     has_changes = False
+
+    # Create a comparison report file
+    report_file = '$LOG_DIR/comparison_report.json'
+    comparison_results = {}
 
     # Process each site
     for site_name, after_site in after_data.items():
@@ -377,6 +431,43 @@ try:
         if new_count > 0:
             has_changes = True
 
+        # Get the site-specific log directory
+        site_log_dir = os.path.join('$LOG_DIR', site_name)
+        os.makedirs(site_log_dir, exist_ok=True)
+
+        # Create site-specific comparison results
+        site_results = {
+            'site': site_name,
+            'before_count': before_count,
+            'after_count': after_count,
+            'new_count': new_count,
+            'new_ids': list(new_ids),
+            'removed_count': removed_count,
+            'removed_ids': list(removed_ids),
+            'has_changes': new_count > 0
+        }
+
+        # Save site-specific comparison results
+        site_comparison_file = os.path.join(site_log_dir, 'comparison.json')
+        with open(site_comparison_file, 'w') as f:
+            json.dump(site_results, f, indent=2)
+
+        # Also create a human-readable report
+        site_report_file = os.path.join(site_log_dir, 'report.txt')
+        with open(site_report_file, 'w') as f:
+            f.write(f\"=== Comparison Report for {site_name} ===\\n\")
+            f.write(f\"Before count: {before_count}\\n\")
+            f.write(f\"After count: {after_count}\\n\")
+            f.write(f\"New grants: {new_count}\\n\")
+            if new_count > 0:
+                f.write(f\"New IDs: {', '.join(list(new_ids)[:10])}{' and more...' if len(new_ids) > 10 else ''}\\n\")
+            f.write(f\"Removed grants: {removed_count}\\n\")
+            if removed_count > 0:
+                f.write(f\"Removed IDs: {', '.join(list(removed_ids)[:10])}{' and more...' if len(removed_ids) > 10 else ''}\\n\")
+
+        # Add to overall comparison results
+        comparison_results[site_name] = site_results
+
         # Report for this site
         if new_count > 0:
             print(f\"{site_name}: {new_count} new grants (previous: {before_count}, current: {after_count})\")
@@ -390,6 +481,14 @@ try:
         # Report removed grants if any
         if removed_count > 0:
             print(f\"  Note: {removed_count} grants no longer in source but remain archived in database.\")
+
+    # Save overall comparison results
+    with open(report_file, 'w') as f:
+        json.dump({
+            'total_new_grants': new_grants_total,
+            'has_changes': has_changes,
+            'sites': comparison_results
+        }, f, indent=2)
 
     # Write results to shell variables
     print(f\"NEW_GRANTS_COUNT={new_grants_total}\")
@@ -445,6 +544,7 @@ except Exception as e:
     echo ""
     echo "✅ Database changes detected: $NEW_GRANTS_COUNT new grants found"
   else
+    # No new grants found in the database comparison
     echo "No new grants found in this scan." >> "$LOG_FILE"
     echo "ℹ️  No changes detected in grant databases."
   fi
