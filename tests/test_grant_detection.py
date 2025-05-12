@@ -99,11 +99,13 @@ def create_validation_data(site_name, num_to_skip=1, max_items=None, add_archive
             return None
 
         # Build the command to run the scraper script
+        # Use the timestamped test directory for the scraper output
+        # This keeps everything organized under the same timestamped directory
         scrape_cmd = [
             sys.executable,
             str(BASE_DIR / "utils" / "scrape_grants.py"),
             "--site", site_name,
-            "--output-dir", str(TEST_DIR)  # Use the main test directory
+            "--output-dir", str(TEST_DIR)  # Use our timestamped test directory
         ]
 
         if max_items:
@@ -123,15 +125,23 @@ def create_validation_data(site_name, num_to_skip=1, max_items=None, add_archive
             logger.error(f"Scraper output: {result.stdout}")
             return None
 
-        # After scraping, move the file to our validation directory
+        # After scraping, check both possible locations for the database file
         source_path = TEST_DIR / f"{site_name}_grants.json"
-        if not source_path.exists():
-            logger.error(f"Database file not found at {source_path}")
+        fallback_path = OUTPUT_DIR / "test" / f"{site_name}_grants.json"
+
+        if source_path.exists():
+            logger.info(f"Database file found in test directory: {source_path}")
+        elif fallback_path.exists():
+            logger.info(f"Database file found in base test directory: {fallback_path}")
+            source_path = fallback_path
+        else:
+            logger.error(f"Database file not found at {source_path} or {fallback_path}")
             return None
 
         # Copy to validation directory
         full_db_path = site_validation_dir / f"{site_name}_grants.json"
         shutil.copy2(source_path, full_db_path)
+        logger.info(f"Copied database from {source_path} to {full_db_path}")
         if not full_db_path.exists():
             logger.error(f"Database file not found at {full_db_path}")
             return None

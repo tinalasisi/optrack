@@ -59,17 +59,29 @@ if [ "$TEST_MODE" = true ]; then
 fi
 
 # Create a log directory for this run with date and time
-RUN_TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-LOG_DIR="$REPO_PATH/logs/runs/$RUN_TIMESTAMP"
+# If a timestamp is provided by a parent script, use it; otherwise, create a new one
+if [ -n "$OPTRACK_RUN_TIMESTAMP" ]; then
+  RUN_TIMESTAMP="$OPTRACK_RUN_TIMESTAMP"
+  echo "Using timestamp provided by parent script: $RUN_TIMESTAMP"
+else
+  RUN_TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+fi
+
+# Move logs directory to output/ for cleaner organization
+OUTPUT_ROOT=$(dirname "$OUTPUT_DIR")
+LOG_DIR="$OUTPUT_ROOT/logs/runs/$RUN_TIMESTAMP"
 mkdir -p "$LOG_DIR"
 
 # IMPORTANT: Capture grant IDs BEFORE scraping
-# Create a file to store the BEFORE counts for compatibility
-PREVIOUS_COUNTS_FILE="$LOG_DIR/before_counts.txt"
-echo "# Grant counts BEFORE scraping $(date)" > "$PREVIOUS_COUNTS_FILE"
+# Create a run summary log file at the top level
+RUN_SUMMARY_FILE="$LOG_DIR/run_summary.log"
+echo "# OpTrack Incremental Run Summary" > "$RUN_SUMMARY_FILE"
+echo "# Started at $(date)" >> "$RUN_SUMMARY_FILE"
+echo "# Output directory: $OUTPUT_DIR" >> "$RUN_SUMMARY_FILE"
+echo "" >> "$RUN_SUMMARY_FILE"
 
-# Also create a JSON file with all grant IDs for accurate comparison
-PREVIOUS_IDS_FILE="$LOG_DIR/before_ids.json"
+# Create a comparison summary file at the top level
+COMPARISON_SUMMARY_FILE="$LOG_DIR/comparison_summary.json"
 
 # Get all competition IDs from current databases
 python -c "
@@ -91,8 +103,8 @@ def extract_ids(file_path):
             print(f\"Error extracting IDs from {file_path}: {e}\", file=sys.stderr)
     return ids
 
-# Store results in a dictionary
-result = {}
+# Store results for the summary
+summary_data = {'sites': {}}
 
 # Load websites config
 try:
@@ -118,13 +130,13 @@ try:
 
         # Extract IDs from this site's database
         ids = extract_ids(db_file)
-        result[site_name] = {
-            'count': len(ids),
-            'ids': ids
-        }
 
-        # Also write to the counts file for backward compatibility
-        print(f\"{site_name}: {len(ids)}\")
+        # Add to run summary log
+        with open('$RUN_SUMMARY_FILE', 'a') as f:
+            f.write(f\"Site: {site_name}\\n\")
+            f.write(f\"  - Database: {db_file}\\n\")
+            f.write(f\"  - Initial grant count: {len(ids)}\\n\")
+            f.write(\"\\n\")
 
         # Save site-specific before data
         site_before_file = os.path.join(site_log_dir, 'before_ids.json')
@@ -135,16 +147,21 @@ try:
                 'site': site_name
             }, f, indent=2)
 
-    # Save combined results to the main before file
-    with open('$PREVIOUS_IDS_FILE', 'w') as f:
-        json.dump(result, f, indent=2)
+        # Add to summary data
+        summary_data['sites'][site_name] = {
+            'before_count': len(ids)
+        }
+
+    # Save initial summary data
+    with open('$COMPARISON_SUMMARY_FILE', 'w') as f:
+        json.dump(summary_data, f, indent=2)
 
 except Exception as e:
     print(f\"ERROR: {e}\")
-    # Create an empty JSON file to avoid errors later
-    with open('$PREVIOUS_IDS_FILE', 'w') as f:
-        json.dump({}, f)
-" >> "$PREVIOUS_COUNTS_FILE"
+    # Log the error
+    with open('$RUN_SUMMARY_FILE', 'a') as f:
+        f.write(f\"ERROR: {e}\\n\")
+"
 
 # Read site information from websites.json and process each enabled site
 # Export LOG_DIR for use by Python script
@@ -263,6 +280,9 @@ COMPLETION_TIME=$(date +"%Y-%m-%d %H:%M:%S")
 cp "$OUTPUT_DIR/scan_log.txt" "$LOG_DIR/scan_log.txt"
 cp "$OUTPUT_DIR/grant_summary.txt" "$LOG_DIR/grant_summary.txt"
 
+# Add a note to the run summary about copied files
+echo "// Copied scan_log.txt and grant_summary.txt to log directory" >> "$RUN_SUMMARY_FILE"
+
 echo "Scan complete. See $OUTPUT_DIR/grant_summary.txt for results."
 echo "Logs saved to $LOG_DIR"
 
@@ -296,10 +316,7 @@ fi
 
 # Only perform Git operations if not in test mode
 if [ "$TEST_MODE" = false ]; then
-  # Create a file to store the AFTER database with all competition IDs
-  AFTER_IDS_FILE="$LOG_DIR/after_ids.json"
-
-  # Get all competition IDs from current databases AFTER scraping
+  # Get all competition IDs from current databases AFTER scraping and update the comparison
   python -c "
 import json
 import os
@@ -319,8 +336,12 @@ def extract_ids(file_path):
             print(f\"Error extracting IDs from {file_path}: {e}\", file=sys.stderr)
     return ids
 
-# Store results in a dictionary
-result = {}
+# Load summary data
+try:
+    with open('$COMPARISON_SUMMARY_FILE', 'r') as f:
+        summary_data = json.load(f)
+except Exception:
+    summary_data = {'sites': {}}
 
 # Load websites config
 try:
@@ -335,6 +356,11 @@ try:
     else:
         websites = [site for site in websites if site.get('enabled', True)]
 
+    # Variables to track overall stats
+    total_new_grants = 0
+    total_removed_grants = 0
+    has_changes = False
+
     # Process each site
     for site in websites:
         site_name = site['name']
@@ -346,19 +372,62 @@ try:
 
         # Extract IDs from this site's database
         ids = extract_ids(db_file)
-        result[site_name] = {
+
+        # Load the before data
+        before_file = os.path.join(site_log_dir, 'before_ids.json')
+        try:
+            with open(before_file, 'r') as f:
+                before_data = json.load(f)
+            before_ids = set(before_data.get('ids', []))
+        except Exception:
+            before_ids = set()
+
+        # Create after data
+        after_data = {
             'count': len(ids),
-            'ids': ids
+            'ids': ids,
+            'site': site_name
         }
 
         # Save site-specific after data
         site_after_file = os.path.join(site_log_dir, 'after_ids.json')
         with open(site_after_file, 'w') as f:
-            json.dump({
-                'count': len(ids),
-                'ids': ids,
-                'site': site_name
-            }, f, indent=2)
+            json.dump(after_data, f, indent=2)
+
+        # Compare before and after
+        after_ids = set(ids)
+        new_ids = after_ids - before_ids
+        removed_ids = before_ids - after_ids
+
+        # Create comparison result
+        comparison = {
+            'site': site_name,
+            'before_count': len(before_ids),
+            'after_count': len(after_ids),
+            'new_count': len(new_ids),
+            'new_ids': list(new_ids),
+            'removed_count': len(removed_ids),
+            'removed_ids': list(removed_ids),
+            'has_changes': len(new_ids) > 0
+        }
+
+        # Save site-specific comparison
+        site_comparison_file = os.path.join(site_log_dir, 'comparison.json')
+        with open(site_comparison_file, 'w') as f:
+            json.dump(comparison, f, indent=2)
+
+        # Create human-readable report
+        site_report_file = os.path.join(site_log_dir, 'report.txt')
+        with open(site_report_file, 'w') as f:
+            f.write(f\"=== Comparison Report for {site_name} ===\\n\")
+            f.write(f\"Before count: {len(before_ids)}\\n\")
+            f.write(f\"After count: {len(after_ids)}\\n\")
+            f.write(f\"New grants: {len(new_ids)}\\n\")
+            if new_ids:
+                f.write(f\"New IDs: {', '.join(list(new_ids)[:10])}{' and more...' if len(new_ids) > 10 else ''}\\n\")
+            f.write(f\"Removed grants: {len(removed_ids)}\\n\")
+            if removed_ids:
+                f.write(f\"Removed IDs: {', '.join(list(removed_ids)[:10])}{' and more...' if len(removed_ids) > 10 else ''}\\n\")
 
         # Copy the database file for reference
         try:
@@ -369,15 +438,58 @@ try:
         except Exception as e:
             print(f\"Error copying database: {e}\", file=sys.stderr)
 
-    # Save combined results to the main after file
-    with open('$AFTER_IDS_FILE', 'w') as f:
-        json.dump(result, f, indent=2)
+        # Update summary data
+        summary_data['sites'][site_name] = {
+            'before_count': len(before_ids),
+            'after_count': len(after_ids),
+            'new_count': len(new_ids),
+            'removed_count': len(removed_ids),
+            'has_changes': len(new_ids) > 0
+        }
+
+        # Update totals
+        total_new_grants += len(new_ids)
+        total_removed_grants += len(removed_ids)
+        if len(new_ids) > 0:
+            has_changes = True
+
+        # Add to run summary
+        with open('$RUN_SUMMARY_FILE', 'a') as f:
+            f.write(f\"Results for {site_name}:\\n\")
+            f.write(f\"  - Final grant count: {len(after_ids)}\\n\")
+            f.write(f\"  - New grants found: {len(new_ids)}\\n\")
+            f.write(f\"  - Removed grants: {len(removed_ids)}\\n\")
+            f.write(\"\\n\")
+
+    # Update overall summary data
+    summary_data['total_new_grants'] = total_new_grants
+    summary_data['total_removed_grants'] = total_removed_grants
+    summary_data['has_changes'] = has_changes
+    summary_data['completed_at'] = os.popen('date -u +\"%Y-%m-%dT%H:%M:%SZ\"').read().strip()
+
+    # Save updated summary
+    with open('$COMPARISON_SUMMARY_FILE', 'w') as f:
+        json.dump(summary_data, f, indent=2)
+
+    # Update the run summary with a final section
+    with open('$RUN_SUMMARY_FILE', 'a') as f:
+        f.write(\"===== Overall Summary =====\\n\")
+        f.write(f\"Total new grants found: {total_new_grants}\\n\")
+        f.write(f\"Total removed grants: {total_removed_grants}\\n\")
+        f.write(f\"Changes detected: {'Yes' if has_changes else 'No'}\\n\")
+        f.write(f\"Completed at: {os.popen('date').read().strip()}\\n\")
+
+    # Write to environment variables for the shell script
+    print(f\"NEW_GRANTS_COUNT={total_new_grants}\")
+    print(f\"HAS_CHANGES={'true' if has_changes else 'false'}\")
 
 except Exception as e:
     print(f\"ERROR: {e}\", file=sys.stderr)
-    # Create an empty JSON file to avoid errors later
-    with open('$AFTER_IDS_FILE', 'w') as f:
-        json.dump({}, f)
+    # Log the error
+    with open('$RUN_SUMMARY_FILE', 'a') as f:
+        f.write(f\"ERROR during comparison: {e}\\n\")
+    print(\"NEW_GRANTS_COUNT=0\")
+    print(\"HAS_CHANGES=false\")
 "
 
   # Now compare the before and after IDs to find changes
