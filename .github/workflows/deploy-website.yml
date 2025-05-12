@@ -45,8 +45,5 @@ jobs:
         working-directory: ./website
         run: npm run build
         
-      - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
-        with:
-          folder: website/build
-          branch: gh-pages
+      # Build is already completed and available in website/build directory
+      # No need for separate deployment step as we're deploying directly from the branch
