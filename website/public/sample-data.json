@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-05-12T15:47:06.687743",
+  "environment": "production",
+  "total_grants": 87,
+  "total_seen_ids": 87,
+  "sites": [
+    {
+      "site": "umich",
+      "database_exists": true,
+      "seen_ids_exists": true,
+      "grant_count": 38,
+      "seen_ids_count": 38,
+      "grants_without_details": 0,
+      "last_updated": "2025-05-12 12:45:34",
+      "storage_stats": {
+        "legacy_json_size": 814.79,
+        "jsonl_size": 804.71,
+        "index_size": 0.79,
+        "csv_size": 814.76,
+        "total_size": 2435.05
+      },
+      "storage_format": "append_only"
+    },
+    {
+      "site": "umms",
+      "database_exists": true,
+      "seen_ids_exists": true,
+      "grant_count": 49,
+      "seen_ids_count": 49,
+      "grants_without_details": 0,
+      "last_updated": "2025-05-10 07:16:58",
+      "storage_stats": {
+        "legacy_json_size": 1256.68,
+        "jsonl_size": 1246.86,
+        "index_size": 1.0,
+        "csv_size": 1256.13,
+        "total_size": 3760.67
+      },
+      "storage_format": "append_only"
+    }
+  ],
+  "summary": {
+    "total_sites": 2,
+    "total_grants": 87,
+    "total_seen_ids": 87,
+    "pending_details": 0,
+    "last_updated": "2025-05-12 12:45:34"
+  }
+}

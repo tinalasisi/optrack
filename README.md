@@ -2,6 +2,8 @@
 
 A comprehensive system for tracking funding opportunities from multiple sources, focusing on U-M InfoReady portal grants.
 
+[![Dashboard](https://img.shields.io/badge/Live-Dashboard-blue)](https://tinalasisi.github.io/optrack/)
+
 ## Features
 - **Interactive login flow** using Selenium with Duo support, then hand‑off cookies to `requests` for faster scraping.
 - **Multi-source tracking** with unified database for grants from different portals.
@@ -13,6 +15,7 @@ A comprehensive system for tracking funding opportunities from multiple sources,
 - **Clean output organization** with JSON and standardized CSV format for easy analysis.
 - **Database compaction** to optimize storage periodically.
 - **Detailed database statistics** with reporting in multiple formats (text, JSON, CSV).
+- **Live dashboard** showing current database statistics and metrics.
 - **Automated monitoring** with shell scripts for scheduling through cron jobs.
 - **Testing infrastructure** for safe development and validation.
 - **Simplified directory structure** with separate `/output/db/` and `/output/test/` folders.
@@ -64,6 +67,14 @@ optrack/
 │   │   └── scan_log.txt            # Scan operations log
 │   └── test/                       # Test output directory
 │       └── (all test files isolated here)
+├── website/                        # Dashboard web application
+│   ├── src/                        # React source code
+│   ├── public/                     # Static files and data
+│   ├── update-stats.sh             # Script to update dashboard data
+│   └── package.json                # Dashboard dependencies
+├── .github/
+│   └── workflows/                  # GitHub Actions workflows
+│       └── deploy-website.yml      # Dashboard deployment workflow
 ├── README.md                       # Project documentation
 ├── requirements.txt                # Pinned dependencies
 └── CHANGELOG.md                    # Version history
@@ -495,6 +506,32 @@ This isolated test environment ensures that test runs won't affect your producti
 - Handles missing or corrupt cookie files gracefully
 - Falls back to Selenium when JSON API is unavailable
 - Provides detailed error messages for troubleshooting
+
+## Dashboard
+
+OpTrack includes a live dashboard that displays current database statistics:
+
+![OpTrack Dashboard](https://tinalasisi.github.io/optrack/dashboard-preview.png)
+
+The dashboard shows:
+- Total grants collected across all sources
+- Count of seen IDs and pending details
+- Per-source statistics and storage metrics
+- Last updated timestamps
+- Storage distribution visualizations
+
+### Accessing the Dashboard
+
+The dashboard is available at: [https://tinalasisi.github.io/optrack/](https://tinalasisi.github.io/optrack/)
+
+### Updating the Dashboard
+
+The dashboard is automatically updated when changes are pushed to the main branch. You can also update it manually:
+
+```bash
+# Generate fresh statistics and rebuild the dashboard
+./website/update-stats.sh
+```
 
 ## License
 MIT
