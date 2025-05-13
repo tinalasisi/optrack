@@ -51,4 +51,8 @@ jobs:
         run: |
           rm -rf docs/*
           cp -R website/build/* docs/
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'github-actions@github.com'
           git add docs/
+          git commit -m "Update dashboard build files via GitHub Actions" || echo "No changes to commit"
+          git push
