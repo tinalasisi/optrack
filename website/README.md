@@ -2,6 +2,8 @@
 
 This is a simple React dashboard for the OpTrack system. It displays the current status of grant databases, including counts, storage metrics, and other statistics.
 
+The dashboard now uses `grants-data.json` as its primary data source, with `sample-data.json` maintained for backward compatibility.
+
 ## Setup
 
 1. Install dependencies:
@@ -21,7 +23,7 @@ This is a simple React dashboard for the OpTrack system. It displays the current
 
 ## Automated Data Updates
 
-The dashboard reads its data from a JSON file located at `public/sample-data.json`. This file should be regularly updated with fresh statistics from the OpTrack system.
+The dashboard reads its data from JSON files located at `public/grants-data.json` (primary) and `public/sample-data.json` (fallback). These files are regularly updated with fresh statistics from the OpTrack system.
 
 To update the data automatically:
 
