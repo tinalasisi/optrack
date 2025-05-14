@@ -274,6 +274,8 @@ The statistics include:
 - Storage format (legacy vs append-only)
 - Last updated timestamps
 - Pending details (IDs seen but not yet in database)
+- Grant titles for pending and recently added grants
+- Consolidated view across all sources
 
 You can also perform fast scans which only check for new IDs without fetching details:
 
@@ -519,6 +521,8 @@ The dashboard shows:
 - Per-source statistics and storage metrics
 - Last updated timestamps
 - Storage distribution visualizations
+- Consolidated chart comparing grants across all sources
+- Detailed pending grants section with titles and links
 
 ### Accessing the Dashboard
 
