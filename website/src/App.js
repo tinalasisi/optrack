@@ -120,6 +120,78 @@ function App() {
           <div className="stat-label">Sources</div>
         </div>
       </div>
+      
+      {/* Consolidated Chart - Compare Across Sources */}
+      <div className="consolidated-chart">
+        <h2>Source Comparison</h2>
+        <Bar
+          options={{
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: 'y',
+            scales: {
+              x: {
+                beginAtZero: true,
+                stacked: false
+              },
+              y: {
+                stacked: false
+              }
+            },
+            plugins: {
+              legend: {
+                position: 'top',
+              },
+              title: {
+                display: true,
+                text: 'Grants by Source'
+              }
+            },
+          }}
+          data={{
+            labels: data.sites.map(site => site.site),
+            datasets: [
+              {
+                label: 'Grants in Database',
+                data: data.sites.map(site => site.grant_count),
+                backgroundColor: 'rgba(54, 162, 235, 0.7)',
+              },
+              {
+                label: 'Pending Details',
+                data: data.sites.map(site => site.grants_without_details),
+                backgroundColor: 'rgba(255, 99, 132, 0.7)',
+              }
+            ],
+          }}
+        />
+      </div>
+      
+      {/* Pending Grants Section */}
+      {data.summary.pending_grants && data.summary.pending_grants.length > 0 && (
+        <div className="pending-grants">
+          <h2>Pending Grants</h2>
+          <p>These grants have been detected but full details have not yet been collected:</p>
+          <div className="pending-grants-list">
+            {data.summary.pending_grants.map((grant, index) => (
+              <div key={grant.id} className="pending-grant-item">
+                <h3>{grant.title}</h3>
+                <div className="pending-grant-details">
+                  <div className="pending-grant-source">{grant.source}</div>
+                  <div className="pending-grant-id">ID: {grant.id}</div>
+                  <a 
+                    href={grant.url} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="pending-grant-link"
+                  >
+                    View Original
+                  </a>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <h2>Grant Sources</h2>
       <div className="sites-grid">
@@ -151,7 +223,7 @@ function App() {
               </div>
             </div>
             <div className="pull-stats">
-              <div className="pull-stats-title">Latest Pull Analysis</div>
+              <div className="pull-stats-title">Grant Status Distribution</div>
               <div className="chart-container">
                 <Doughnut
                   options={{
@@ -174,19 +246,22 @@ function App() {
                     },
                   }}
                   data={{
-                    labels: ['Grants in Database', 'New Grants Found'],
+                    labels: ['Complete Grants', 'Pending Details', 'New Grants'],
                     datasets: [
                       {
                         data: [
                           site.grant_count,
+                          site.grants_without_details || 0,
                           site.latest_pull?.new_grants || 0
                         ],
                         backgroundColor: [
                           'rgba(54, 162, 235, 0.7)',
+                          'rgba(255, 159, 64, 0.7)',
                           'rgba(255, 99, 132, 0.7)'
                         ],
                         borderColor: [
                           'rgba(54, 162, 235, 1)',
+                          'rgba(255, 159, 64, 1)',
                           'rgba(255, 99, 132, 1)'
                         ],
                         borderWidth: 1,
@@ -196,57 +271,26 @@ function App() {
                 />
               </div>
             </div>
-            <div className="pull-comparison">
-              <div className="pull-bar-container">
-                <Bar
-                  options={{
-                    indexAxis: 'y',
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                      x: {
-                        beginAtZero: true,
-                        stacked: false,
-                        grid: {
-                          display: false
-                        }
-                      },
-                      y: {
-                        stacked: false,
-                        grid: {
-                          display: false
-                        }
-                      }
-                    },
-                    plugins: {
-                      legend: {
-                        display: true,
-                        position: 'top',
-                      },
-                      title: {
-                        display: true,
-                        text: 'Database vs Latest Pull'
-                      }
-                    },
-                  }}
-                  data={{
-                    labels: ['Grants'],
-                    datasets: [
-                      {
-                        label: 'Grants in Database',
-                        data: [site.grant_count],
-                        backgroundColor: 'rgba(54, 162, 235, 0.7)',
-                      },
-                      {
-                        label: 'Latest Pull Total',
-                        data: [site.latest_pull?.total_found || 0],
-                        backgroundColor: 'rgba(255, 159, 64, 0.7)',
-                      }
-                    ],
-                  }}
-                />
+            
+            {/* Pending Grants for this Source */}
+            {site.pending_grants && site.pending_grants.length > 0 && (
+              <div className="site-pending-grants">
+                <h4>Pending Grants for {site.site}</h4>
+                <ul className="site-pending-grants-list">
+                  {site.pending_grants.map(grant => (
+                    <li key={grant.id}>
+                      <a 
+                        href={grant.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                      >
+                        {grant.title}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
               </div>
-            </div>
+            )}
             <div className="updated">Last updated: {site.last_updated}</div>
           </div>
         ))}

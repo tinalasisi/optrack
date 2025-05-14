@@ -156,6 +156,118 @@ header {
   height: 120px;
 }
 
+/* New styles for consolidated chart and pending grants */
+.consolidated-chart {
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  margin-bottom: 30px;
+  height: 300px;
+}
+
+.pending-grants {
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  margin-bottom: 30px;
+}
+
+.pending-grants h2 {
+  margin-top: 0;
+  color: #2c3e50;
+  font-size: 1.5rem;
+}
+
+.pending-grants p {
+  color: #7f8c8d;
+  margin-bottom: 20px;
+}
+
+.pending-grants-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.pending-grant-item {
+  flex: 1;
+  min-width: 300px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 15px;
+  background-color: #f9f9f9;
+}
+
+.pending-grant-item h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 1.1rem;
+  color: #2980b9;
+}
+
+.pending-grant-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 0.9rem;
+}
+
+.pending-grant-source {
+  background-color: #3498db;
+  color: white;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.pending-grant-id {
+  color: #7f8c8d;
+}
+
+.pending-grant-link {
+  margin-left: auto;
+  color: #e74c3c;
+  text-decoration: none;
+}
+
+.pending-grant-link:hover {
+  text-decoration: underline;
+}
+
+/* Site-specific pending grants */
+.site-pending-grants {
+  margin-top: 15px;
+  padding: 10px;
+  background-color: #f9f9f9;
+  border-radius: 6px;
+}
+
+.site-pending-grants h4 {
+  margin-top: 0;
+  color: #2c3e50;
+  font-size: 1rem;
+}
+
+.site-pending-grants-list {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.site-pending-grants-list li {
+  margin-bottom: 5px;
+}
+
+.site-pending-grants-list a {
+  color: #3498db;
+  text-decoration: none;
+}
+
+.site-pending-grants-list a:hover {
+  text-decoration: underline;
+}
+
 footer {
   margin-top: 50px;
   text-align: center;

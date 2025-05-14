@@ -17,6 +17,7 @@ Where:
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 from datetime import datetime
 import logging
@@ -99,7 +100,9 @@ def get_site_stats(site_name: str, is_test: bool = False) -> Dict[str, Any]:
             "csv_size": 0,
             "total_size": 0
         },
-        "storage_format": "unknown"
+        "storage_format": "unknown",
+        "pending_grants": [],  # List of grants with IDs seen but no details
+        "new_grants": []       # List of recently added grants
     }
     
     # Check legacy JSON database
@@ -144,6 +147,42 @@ def get_site_stats(site_name: str, is_test: bool = False) -> Dict[str, Any]:
                                 # Estimate total found
                                 if "before_count" in site_data and "after_count" in site_data:
                                     stats["latest_pull"]["total_found"] = site_data["after_count"]
+                                
+                                # Get new_ids if available and find their titles
+                                if "new_ids" in site_data and site_data["new_ids"]:
+                                    for new_id in site_data["new_ids"]:
+                                        # Try to get the title from the database
+                                        title = f"New Grant {new_id}"
+                                        if json_path.exists():
+                                            try:
+                                                with open(json_path, "r", encoding="utf-8") as db_file:
+                                                    db_data = json.load(db_file)
+                                                    if "grants" in db_data and new_id in db_data["grants"]:
+                                                        title = db_data["grants"][new_id].get("title", title)
+                                            except Exception as e:
+                                                logger.warning(f"Error getting new grant title from DB: {e}")
+                                        
+                                        # If not in database, try logs
+                                        if title.startswith("New Grant"):
+                                            log_file = db_dir / "launchd_output.log"
+                                            if log_file.exists():
+                                                try:
+                                                    with open(log_file, "r", encoding="utf-8") as f:
+                                                        log_content = f.read()
+                                                        pattern = rf"- {new_id}: (.+?)(?:\n|$)"
+                                                        match = re.search(pattern, log_content)
+                                                        if match:
+                                                            title = match.group(1).strip()
+                                                except Exception as e:
+                                                    logger.warning(f"Error searching logs for new grant title: {e}")
+                                        
+                                        stats["new_grants"].append({
+                                            "id": new_id,
+                                            "title": title,
+                                            "source": site_name,
+                                            "url": f"https://{site_name}.infoready4.com#competitionDetail/{new_id}"
+                                        })
+                                        
                                 break
                 except Exception as e:
                     logger.warning(f"Error reading comparison data for {site_name}: {e}")
@@ -180,7 +219,50 @@ def get_site_stats(site_name: str, is_test: bool = False) -> Dict[str, Any]:
                 
                 # Calculate IDs seen but not in database
                 if stats["database_exists"]:
-                    stats["grants_without_details"] = max(0, stats["seen_ids_count"] - stats["grant_count"])
+                    grants_without_details = max(0, stats["seen_ids_count"] - stats["grant_count"])
+                    stats["grants_without_details"] = grants_without_details
+                    
+                    # Get details for pending grants if there are any without details
+                    if grants_without_details > 0:
+                        # First, get the set of IDs with details
+                        db_ids = set()
+                        if json_path.exists():
+                            try:
+                                with open(json_path, "r", encoding="utf-8") as f:
+                                    json_data = json.load(f)
+                                    if "grants" in json_data and isinstance(json_data["grants"], dict):
+                                        db_ids = set(json_data["grants"].keys())
+                            except Exception as e:
+                                logger.warning(f"Error extracting IDs from {json_path}: {e}")
+                        
+                        # Get seen IDs that aren't in the database
+                        seen_ids = set(data.get("ids", []))
+                        pending_ids = seen_ids - db_ids
+                        
+                        # Get information about pending grants from the launchd logs
+                        for pending_id in pending_ids:
+                            # Try to get title from logs
+                            title = f"Unknown Grant {pending_id}"
+                            log_file = db_dir / "launchd_output.log"
+                            
+                            if log_file.exists():
+                                try:
+                                    with open(log_file, "r", encoding="utf-8") as f:
+                                        log_content = f.read()
+                                        # Look for pattern: - {id}: {title}
+                                        pattern = rf"- {pending_id}: (.+?)(?:\n|$)"
+                                        match = re.search(pattern, log_content)
+                                        if match:
+                                            title = match.group(1).strip()
+                                except Exception as e:
+                                    logger.warning(f"Error searching logs for pending grant title: {e}")
+                            
+                            stats["pending_grants"].append({
+                                "id": pending_id,
+                                "title": title,
+                                "source": site_name,
+                                "url": f"https://{site_name}.infoready4.com#competitionDetail/{pending_id}"
+                            })
         except Exception as e:
             logger.warning(f"Error reading seen IDs for {site_name}: {e}")
     
@@ -229,8 +311,17 @@ def get_all_stats(site_name: Optional[str] = None, is_test: bool = False) -> Dic
         "total_seen_ids": stats["total_seen_ids"],
         "pending_details": sum(s["grants_without_details"] for s in stats["sites"]),
         "new_grants_last_pull": sum(s["latest_pull"]["new_grants"] for s in stats["sites"]),
-        "last_updated": max([s["last_updated"] for s in stats["sites"] if s["last_updated"]], default="N/A")
+        "last_updated": max([s["last_updated"] for s in stats["sites"] if s["last_updated"]], default="N/A"),
+        "pending_grants": [],  # Will be populated with all pending grants
+        "new_grants": []       # Will be populated with all new grants
     }
+    
+    # Collect all pending grants and new grants in the summary
+    for site in stats["sites"]:
+        if site["pending_grants"]:
+            stats["summary"]["pending_grants"].extend(site["pending_grants"])
+        if site["new_grants"]:
+            stats["summary"]["new_grants"].extend(site["new_grants"])
     
     return stats
 

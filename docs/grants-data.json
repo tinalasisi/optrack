@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-05-13T20:57:23.466733",
+  "timestamp": "2025-05-13T21:23:54.351706",
   "environment": "production",
   "total_grants": 87,
   "total_seen_ids": 90,
@@ -24,7 +24,16 @@
         "csv_size": 814.76,
         "total_size": 2456.83
       },
-      "storage_format": "append_only"
+      "storage_format": "append_only",
+      "pending_grants": [
+        {
+          "id": "1967464",
+          "title": "Unknown Grant 1967464",
+          "source": "umich",
+          "url": "https://umich.infoready4.com#competitionDetail/1967464"
+        }
+      ],
+      "new_grants": []
     },
     {
       "site": "umms",
@@ -46,7 +55,22 @@
         "csv_size": 1256.13,
         "total_size": 3810.2
       },
-      "storage_format": "append_only"
+      "storage_format": "append_only",
+      "pending_grants": [
+        {
+          "id": "1981068",
+          "title": "Unknown Grant 1981068",
+          "source": "umms",
+          "url": "https://umms.infoready4.com#competitionDetail/1981068"
+        },
+        {
+          "id": "1981015",
+          "title": "Unknown Grant 1981015",
+          "source": "umms",
+          "url": "https://umms.infoready4.com#competitionDetail/1981015"
+        }
+      ],
+      "new_grants": []
     }
   ],
   "summary": {
@@ -55,6 +79,27 @@
     "total_seen_ids": 90,
     "pending_details": 3,
     "new_grants_last_pull": 0,
-    "last_updated": "2025-05-12 12:45:34"
+    "last_updated": "2025-05-12 12:45:34",
+    "pending_grants": [
+      {
+        "id": "1967464",
+        "title": "Unknown Grant 1967464",
+        "source": "umich",
+        "url": "https://umich.infoready4.com#competitionDetail/1967464"
+      },
+      {
+        "id": "1981068",
+        "title": "Unknown Grant 1981068",
+        "source": "umms",
+        "url": "https://umms.infoready4.com#competitionDetail/1981068"
+      },
+      {
+        "id": "1981015",
+        "title": "Unknown Grant 1981015",
+        "source": "umms",
+        "url": "https://umms.infoready4.com#competitionDetail/1981015"
+      }
+    ],
+    "new_grants": []
   }
 }
