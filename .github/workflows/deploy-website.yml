@@ -5,6 +5,7 @@ on:
     branches: [ auto-updates ]
     paths:
       - 'website/**'
+      - 'docs/grants-data.json'
       - '.github/workflows/deploy-website.yml'
   workflow_dispatch:
 
@@ -28,11 +29,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           
-      - name: Generate fresh statistics
+      # Skip generating fresh statistics - using pre-generated grants-data.json file
+      - name: Verify data files exist
         run: |
-          python core/stats.py --json > website/public/sample-data.json
-          # Also save to docs directory for direct deployment
-          python core/stats.py --json > docs/sample-data.json
+          echo "Using pre-generated grants data files"
+          ls -la docs/grants-data.json
+          # Copy to website directory to ensure it's included in the build
+          cp docs/grants-data.json website/public/
           
       - name: Set up Node.js
         uses: actions/setup-node@v3

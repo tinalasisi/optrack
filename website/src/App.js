@@ -33,14 +33,31 @@ function App() {
         // Add a timestamp to prevent browser caching
         const timestamp = new Date().getTime();
         const pathPrefix = process.env.PUBLIC_URL || '';
-        console.log('Fetching from:', `${pathPrefix}/sample-data.json?v=${timestamp}`);
+        
+        // Primary data file is grants-data.json - contains actual grant data
+        const dataFile = 'grants-data.json';
+        console.log('Fetching from:', `${pathPrefix}/${dataFile}?v=${timestamp}`);
 
-        const response = await fetch(`${pathPrefix}/sample-data.json?v=${timestamp}`);
+        const response = await fetch(`${pathPrefix}/${dataFile}?v=${timestamp}`);
 
         if (!response.ok) {
-          console.error('First fetch attempt failed, trying fallback');
-          // If that fails, try the relative path as fallback
-          const fallbackResponse = await fetch(`./sample-data.json?v=${timestamp}`);
+          console.error('First fetch attempt failed, trying fallback paths');
+          
+          // Try the original sample-data.json for backward compatibility
+          let fallbackResponse;
+          try {
+            fallbackResponse = await fetch(`${pathPrefix}/sample-data.json?v=${timestamp}`);
+            if (!fallbackResponse.ok) {
+              // If that fails too, try relative path as final fallback
+              fallbackResponse = await fetch(`./grants-data.json?v=${timestamp}`);
+              if (!fallbackResponse.ok) {
+                fallbackResponse = await fetch(`./sample-data.json?v=${timestamp}`);
+              }
+            }
+          } catch (fallbackError) {
+            // Final attempt with the most basic path
+            fallbackResponse = await fetch(`./sample-data.json?v=${timestamp}`);
+          }
 
           if (!fallbackResponse.ok) {
             throw new Error(`HTTP error! status: ${fallbackResponse.status}`);

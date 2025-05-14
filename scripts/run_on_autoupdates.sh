@@ -243,6 +243,21 @@ END_TIME=$(date +"%Y-%m-%d %H:%M:%S")
 git add -f "$LOG_FILE"
 git commit -m "Complete OpTrack scan on $(date +"%Y-%m-%d")"
 
+# Update website data files with current stats using properly named files
+echo "📊 Updating website data files"
+# Generate grants-data.json (production data)
+python core/stats.py --json > website/public/grants-data.json
+python core/stats.py --json > docs/grants-data.json
+
+# Keep sample-data.json for backward compatibility 
+cp website/public/grants-data.json website/public/sample-data.json
+cp docs/grants-data.json docs/sample-data.json
+
+# Add all data files to git
+git add website/public/grants-data.json docs/grants-data.json
+git add website/public/sample-data.json docs/sample-data.json
+git commit -m "Update website data with latest grant statistics" || echo "No changes to website data"
+
 # Push changes if remote exists and there are unpushed commits
 if git remote -v | grep -q origin; then
   # Check if there are any unpushed commits
