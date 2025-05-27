@@ -1,8 +1,84 @@
-==== OpTrack Scheduled Run ====
-Start Time: 2025-05-27 07:34:18
-Branch: auto-updates
-Mode: Incremental
+# OpTrack Incremental Run Summary
+# Started at Tue May 27 07:34:18 EDT 2025
+# Output directory: output/db
 
-=== Run in Progress ===
-Scan started at 2025-05-27 07:34:18 - please wait for completion...
+Site: umich
+  - Database: output/db/umich_grants.json
+  - Initial grant count: 38
 
+Site: umms
+  - Database: output/db/umms_grants.json
+  - Initial grant count: 49
+
+// Copied scan_log.txt and grant_summary.txt to log directory
+Results for umich:
+  - Final grant count: 38
+  - New grants found: 0
+  - Removed grants: 0
+
+Results for umms:
+  - Final grant count: 49
+  - New grants found: 0
+  - Removed grants: 0
+
+===== Overall Summary =====
+Total new grants found: 0
+Total removed grants: 0
+Changes detected: No
+Completed at: Tue May 27 08:30:50 EDT 2025
+=== Database Changes ===
+No new grants found in this scan.
+
+=== Run Completed ===
+End Time: 2025-05-27 08:30:50
+
+=== Database Summary ===
+=== OpTrack Database Statistics ===
+Time: 2025-05-27 08:30:49
+Environment: production
+
+=== Summary ===
+Total Sites: 2
+Total Grants: 87
+Total Seen IDs: 102
+New Grants (Last Pull): 0
+Pending Details: 15 (IDs seen but not in database)
+Last Updated: 2025-05-12 12:45:34
+
+=== Site Details ===
+Site: umich
+  Database Format: append_only
+  Grants in Database: 38
+  Seen IDs: 48
+  Pending Details: 10 (IDs seen but not in database)
+  Latest Pull:
+    Total Found: 38
+    New Grants: 0
+    Timestamp: 2025-05-12 12:45:34
+  Last Updated: 2025-05-12 12:45:34
+  Storage (KB):
+    Legacy JSON: 814.79
+    JSONL Data: 957.72
+    Index: 0.98
+    CSV: 814.76
+    Total: 2588.25
+
+Site: umms
+  Database Format: append_only
+  Grants in Database: 49
+  Seen IDs: 54
+  Pending Details: 5 (IDs seen but not in database)
+  Latest Pull:
+    Total Found: 49
+    New Grants: 0
+    Timestamp: 2025-05-10 07:16:58
+  Last Updated: 2025-05-10 07:16:58
+  Storage (KB):
+    Legacy JSON: 1256.68
+    JSONL Data: 1371.06
+    Index: 1.09
+    CSV: 1256.13
+    Total: 3884.96
+
+
+Total Duration: 00:56:32 (HH:MM:SS)
