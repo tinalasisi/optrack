@@ -5,10 +5,12 @@ then stores session cookies to cookies.pkl.
 Pass --url to choose the starting site.
 """
 
-import pickle
-from pathlib import Path
-from selenium import webdriver
 import argparse
+import pickle
+import time
+from pathlib import Path
+
+from selenium import webdriver
 
 COOKIE_PATH = Path("data/cookies.pkl")
 
