@@ -21,6 +21,13 @@ import shutil
 import pickle
 import re
 
+if __name__ != "__main__":
+    import pytest
+    pytest.skip(
+        "Network-based functional test, skipped during pytest run",
+        allow_module_level=True,
+    )
+
 import pandas as pd
 from selenium import webdriver
 from bs4 import BeautifulSoup

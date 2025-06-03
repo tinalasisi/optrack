@@ -31,6 +31,13 @@ from utils.scrape_grants import load_website_config as get_website_config
 # Setup paths
 OUTPUT_DIR = BASE_DIR / "output"
 
+if __name__ != "__main__":
+    import pytest
+    pytest.skip(
+        "Network-based functional test, skipped during pytest run",
+        allow_module_level=True,
+    )
+
 # Create a timestamped directory for this test run
 TEST_TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 TEST_DIR = OUTPUT_DIR / "test" / TEST_TIMESTAMP

@@ -7,6 +7,13 @@ import os
 from pathlib import Path
 import argparse
 
+if __name__ != "__main__":
+    import pytest
+    pytest.skip(
+        "Utility script, skipped during pytest run",
+        allow_module_level=True,
+    )
+
 # Directory setup
 BASE_DIR = Path(__file__).parent.parent
 OUTPUT_DIR = BASE_DIR / "output"
