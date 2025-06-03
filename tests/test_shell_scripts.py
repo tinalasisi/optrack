@@ -34,6 +34,13 @@ DATABASE = "🗃️"
 FILE = "📄"
 ROCKET = "🚀"
 
+if __name__ != "__main__":
+    import pytest
+    pytest.skip(
+        "Network-based functional test, skipped during pytest run",
+        allow_module_level=True,
+    )
+
 def ensure_directory(path: Path):
     """Create directory if it doesn't exist."""
     path.mkdir(exist_ok=True, parents=True)
