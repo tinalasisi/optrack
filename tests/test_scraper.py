@@ -14,6 +14,13 @@ from pathlib import Path
 import json
 import shutil
 
+if __name__ != "__main__":
+    import pytest
+    pytest.skip(
+        "Network-based functional test, skipped during pytest run",
+        allow_module_level=True,
+    )
+
 # Test directory setup
 BASE_DIR = Path(__file__).parent.parent
 OUTPUT_DIR = BASE_DIR / "output"

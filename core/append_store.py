@@ -299,11 +299,13 @@ class AppendStore:
             competition_id = record.get("competition_id", "")
             if not competition_id:
                 continue
-            
+
+            # Determine if this ID is new before adding
+            is_new = competition_id not in self.index
+
             # Add the grant (this handles both new and updates)
-            if self.add_grant(record):
-                if not self.has_id(competition_id):
-                    new_count += 1
+            if self.add_grant(record) and is_new:
+                new_count += 1
         
         if new_count > 0:
             logger.info(f"Added {new_count} new grants to {self.site_name} database")

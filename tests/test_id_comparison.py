@@ -23,6 +23,13 @@ OUTPUT_DIR = BASE_DIR / "output"
 TEST_DIR = OUTPUT_DIR / "test"
 SCRIPTS_DIR = BASE_DIR / "scripts"
 
+if __name__ != "__main__":
+    import pytest
+    pytest.skip(
+        "Network-based functional test, skipped during pytest run",
+        allow_module_level=True,
+    )
+
 # Ensure test directory exists
 TEST_DIR.mkdir(exist_ok=True, parents=True)
 
