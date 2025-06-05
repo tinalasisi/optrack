@@ -76,6 +76,38 @@ def get_site_names(is_test: bool = False) -> List[str]:
         
     return sorted(list(site_names))
 
+def lookup_grant_title(grant_id: str, jsonl_path: Path, csv_path: Path) -> Optional[str]:
+    """Try to find the grant title by ID in JSONL or CSV files."""
+    # Try JSONL
+    if jsonl_path.exists():
+        try:
+            with open(jsonl_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        obj = json.loads(line)
+                        if str(obj.get("competition_id", obj.get("id", ""))) == str(grant_id):
+                            title = obj.get("title")
+                            if title:
+                                return title
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+    # Try CSV
+    if csv_path.exists():
+        import csv
+        try:
+            with open(csv_path, newline='', encoding='utf-8') as csvfile:
+                reader = csv.DictReader(csvfile)
+                for row in reader:
+                    if str(row.get("competition_id", row.get("id", ""))) == str(grant_id):
+                        title = row.get("title")
+                        if title:
+                            return title
+        except Exception:
+            pass
+    return None
+
 def get_site_stats(site_name: str, is_test: bool = False) -> Dict[str, Any]:
     """Get statistics for a specific site."""
     db_dir = OUTPUT_TEST_DIR if is_test else OUTPUT_DB_DIR
@@ -176,6 +208,12 @@ def get_site_stats(site_name: str, is_test: bool = False) -> Dict[str, Any]:
                                                 except Exception as e:
                                                     logger.warning(f"Error searching logs for new grant title: {e}")
                                         
+                                        # In new_grants logic, after trying DB and logs, try JSONL/CSV
+                                        if title.startswith("New Grant"):
+                                            found_title = lookup_grant_title(new_id, jsonl_path, csv_path)
+                                            if found_title:
+                                                title = found_title
+                                        
                                         stats["new_grants"].append({
                                             "id": new_id,
                                             "title": title,
@@ -190,6 +228,7 @@ def get_site_stats(site_name: str, is_test: bool = False) -> Dict[str, Any]:
     # Check append-only JSONL database
     jsonl_path = db_dir / JSONL_PATTERN.format(site=site_name)
     index_path = db_dir / INDEX_PATTERN.format(site=site_name)
+    csv_path = db_dir / CSV_PATTERN.format(site=site_name)
     
     if jsonl_path.exists() and index_path.exists():
         try:
@@ -256,6 +295,12 @@ def get_site_stats(site_name: str, is_test: bool = False) -> Dict[str, Any]:
                                             title = match.group(1).strip()
                                 except Exception as e:
                                     logger.warning(f"Error searching logs for pending grant title: {e}")
+                            
+                            # In pending_grants logic, after trying logs, try JSONL/CSV
+                            if title.startswith("Unknown Grant"):
+                                found_title = lookup_grant_title(pending_id, jsonl_path, csv_path)
+                                if found_title:
+                                    title = found_title
                             
                             stats["pending_grants"].append({
                                 "id": pending_id,

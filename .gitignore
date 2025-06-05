@@ -102,3 +102,4 @@ yarn.lock
 /build
 /website/build
 .vercel
+!output/db/grant_summary.json
