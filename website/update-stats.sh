@@ -8,9 +8,10 @@ cd "$(dirname "$0")/.."
 source venv/bin/activate
 
 # Run stats.py to generate fresh JSON data and save it to the website directory
-python core/stats.py --json > website/public/sample-data.json
+python core/stats.py --json > website/public/grants-data.json
+cp website/public/grants-data.json website/public/sample-data.json
 
-echo "Updated website/public/sample-data.json with the latest statistics"
+echo "Updated website/public/grants-data.json and website/public/sample-data.json with the latest statistics"
 
 # If npm is installed, also build the website
 if command -v npm &> /dev/null; then
