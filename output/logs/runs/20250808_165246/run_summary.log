@@ -1,8 +1,50 @@
-==== OpTrack Scheduled Run ====
-Start Time: 2025-08-08 16:52:47
-Branch: auto-updates
-Mode: Incremental
+# OpTrack Incremental Run Summary
+# Started at Fri Aug  8 16:52:47 EDT 2025
+# Output directory: output/db
 
-=== Run in Progress ===
-Scan started at 2025-08-08 16:52:47 - please wait for completion...
+Site: umich
+  - Database: output/db/umich_grants.json
+  - Initial grant count: 0
 
+Site: umms
+  - Database: output/db/umms_grants.json
+  - Initial grant count: 0
+
+// Copied scan_log.txt and grant_summary.txt to log directory
+Results for umich:
+  - Final grant count: 0
+  - New grants found: 0
+  - Removed grants: 0
+
+Results for umms:
+  - Final grant count: 0
+  - New grants found: 0
+  - Removed grants: 0
+
+===== Overall Summary =====
+Total new grants found: 0
+Total removed grants: 0
+Changes detected: No
+Completed at: Fri Aug  8 16:52:54 EDT 2025
+=== Database Changes ===
+No new grants found in this scan.
+
+=== Run Completed ===
+End Time: 2025-08-08 16:52:54
+
+=== Database Summary ===
+=== OpTrack Database Statistics ===
+Time: 2025-08-08 16:52:54
+Environment: production
+
+=== Summary ===
+Total Sites: 0
+Total Grants: 0
+Total Seen IDs: 0
+New Grants (Last Pull): 0
+Pending Details: 0 (IDs seen but not in database)
+Last Updated: N/A
+
+=== Site Details ===
+
+Total Duration: 00:00:07 (HH:MM:SS)
