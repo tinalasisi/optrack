@@ -37,6 +37,8 @@ from bs4 import NavigableString
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.remote.webdriver import WebDriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
 # Import project utilities
 import sys
@@ -466,8 +468,11 @@ def scan_for_new_ids(
     """
     logger.info(f"Initializing Selenium driver for scanning {site_name}")
     driver = create_selenium_driver(headless=not visible)
+    if driver is None:
+        logger.warning("Skipping fast scan; Chrome driver not available")
+        return set()
     new_ids = set()
-    
+
     try:
         # Navigate to main listing
         url = f"{base_url}/{LISTING_PATH}"
@@ -515,7 +520,7 @@ def scan_for_new_ids(
     
     return new_ids
 
-def create_selenium_driver(headless: bool = True) -> webdriver.Chrome:
+def create_selenium_driver(headless: bool = True) -> Optional[webdriver.Chrome]:
     """
     Create a properly configured Selenium driver with options for reliability.
     
@@ -538,10 +543,15 @@ def create_selenium_driver(headless: bool = True) -> webdriver.Chrome:
         options.add_argument("--start-maximized")  # Start maximized (only when visible)
         logger.info("Running Chrome in visible mode")
     
-    # Create and return the driver
-    driver = webdriver.Chrome(options=options)
-    driver.set_page_load_timeout(30)  # Set page load timeout to 30 seconds
-    return driver
+    # Create and return the driver using webdriver-manager for portability
+    try:
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=options)
+        driver.set_page_load_timeout(30)  # Set page load timeout to 30 seconds
+        return driver
+    except Exception as e:
+        logger.warning(f"Chrome driver unavailable: {e}")
+        return None
 
 def scrape_all(
     sess: requests.Session,
