@@ -1,125 +1,52 @@
 {
-  "timestamp": "2025-06-05T14:43:00.358197",
+  "timestamp": "2025-08-08T18:17:21.902966",
   "environment": "production",
-  "total_grants": 97,
-  "total_seen_ids": 109,
+  "total_grants": 81,
+  "total_seen_ids": 81,
   "sites": [
     {
       "site": "umich",
       "database_exists": true,
       "seen_ids_exists": true,
-      "grant_count": 38,
-      "seen_ids_count": 50,
-      "grants_without_details": 12,
-      "last_updated": "2025-05-12 12:45:34",
+      "grant_count": 40,
+      "seen_ids_count": 40,
+      "grants_without_details": 0,
+      "last_updated": "2025-08-08 18:08:46",
       "latest_pull": {
-        "timestamp": "2025-05-12 12:45:34",
-        "total_found": 38,
-        "new_grants": 0
+        "timestamp": "2025-08-08 22:17:21",
+        "total_found": 40,
+        "new_grants": 40
       },
       "storage_stats": {
-        "legacy_json_size": 814.79,
-        "jsonl_size": 1001.97,
-        "index_size": 1.02,
-        "csv_size": 814.76,
-        "total_size": 2632.54
+        "legacy_json_size": 591.64,
+        "jsonl_size": 581.43,
+        "index_size": 0.83,
+        "csv_size": 590.99,
+        "total_size": 1764.89
       },
       "storage_format": "append_only",
-      "pending_grants": [
-        {
-          "id": "1983372",
-          "title": "Grants to Reduce Domestic Violence, Dating Violence, Sexual Assault, and Stalking on Campus Program",
-          "source": "umich",
-          "url": "https://umich.infoready4.com#competitionDetail/1983372"
-        },
-        {
-          "id": "1983508",
-          "title": "Collaborative Program Grant for Multidisciplinary Teams (RM1 - Clinical Trial Optional)",
-          "source": "umich",
-          "url": "https://umich.infoready4.com#competitionDetail/1983508"
-        },
-        {
-          "id": "1967464",
-          "title": "Unknown Grant 1967464",
-          "source": "umich",
-          "url": "https://umich.infoready4.com#competitionDetail/1967464"
-        },
-        {
-          "id": "1983408",
-          "title": "Sloan Research Fellowships",
-          "source": "umich",
-          "url": "https://umich.infoready4.com#competitionDetail/1983408"
-        },
-        {
-          "id": "1983390",
-          "title": "2025 Cohort \u2013 Laboratory Animal Research Coordinator Certification Program",
-          "source": "umich",
-          "url": "https://umich.infoready4.com#competitionDetail/1983390"
-        },
-        {
-          "id": "1983515",
-          "title": "Pathways to Success: Career Readiness through American Expertise",
-          "source": "umich",
-          "url": "https://umich.infoready4.com#competitionDetail/1983515"
-        },
-        {
-          "id": "1983288",
-          "title": "Scalable Memory Architecture Program (SMAP)",
-          "source": "umich",
-          "url": "https://umich.infoready4.com#competitionDetail/1983288"
-        },
-        {
-          "id": "1983513",
-          "title": "Sexual Assault Forensic Exam (SAFE) Hiring and Training Program",
-          "source": "umich",
-          "url": "https://umich.infoready4.com#competitionDetail/1983513"
-        },
-        {
-          "id": "1984058",
-          "title": "Beckman Young Investigators (BYI) Program",
-          "source": "umich",
-          "url": "https://umich.infoready4.com#competitionDetail/1984058"
-        },
-        {
-          "id": "1982991",
-          "title": "The Safe Streets and Roads for All Grant",
-          "source": "umich",
-          "url": "https://umich.infoready4.com#competitionDetail/1982991"
-        },
-        {
-          "id": "1983335",
-          "title": "Investing in health care to prevent harm from firearm injuries and deaths",
-          "source": "umich",
-          "url": "https://umich.infoready4.com#competitionDetail/1983335"
-        },
-        {
-          "id": "1983397",
-          "title": "Fire Prevention and Safety (FP&S) Grant",
-          "source": "umich",
-          "url": "https://umich.infoready4.com#competitionDetail/1983397"
-        }
-      ],
+      "pending_grants": [],
       "new_grants": []
     },
     {
       "site": "umms",
       "database_exists": true,
       "seen_ids_exists": true,
-      "grant_count": 59,
-      "seen_ids_count": 59,
+      "grant_count": 41,
+      "seen_ids_count": 41,
       "grants_without_details": 0,
-      "last_updated": "2025-06-05 14:42:58",
+      "last_updated": "2025-08-08 18:17:21",
       "latest_pull": {
-        "timestamp": "2025-06-05 18:42:59",
-        "total_found": 59,
-        "new_grants": 10
+        "timestamp": "2025-08-08 22:17:21",
+        "total_found": 41,
+        "new_grants": 41
       },
       "storage_stats": {
-        "legacy_json_size": 1470.01,
-        "jsonl_size": 1457.96,
-        "index_size": 1.18,
-        "csv_size": 1469.47,
-        "total_size": 4398.63
+        "legacy_json_size": 743.11,
+        "jsonl_size": 735.19,
+        "index_size": 0.85,
+        "csv_size": 741.37,
+        "total_size": 2220.52
       },
       "storage_format": "append_only",
       "pending_grants": [],
@@ -128,85 +55,12 @@
   ],
   "summary": {
     "total_sites": 2,
-    "total_grants": 97,
-    "total_seen_ids": 109,
-    "pending_details": 12,
-    "new_grants_last_pull": 10,
-    "last_updated": "2025-06-05 14:42:58",
-    "pending_grants": [
-      {
-        "id": "1983372",
-        "title": "Grants to Reduce Domestic Violence, Dating Violence, Sexual Assault, and Stalking on Campus Program",
-        "source": "umich",
-        "url": "https://umich.infoready4.com#competitionDetail/1983372"
-      },
-      {
-        "id": "1983508",
-        "title": "Collaborative Program Grant for Multidisciplinary Teams (RM1 - Clinical Trial Optional)",
-        "source": "umich",
-        "url": "https://umich.infoready4.com#competitionDetail/1983508"
-      },
-      {
-        "id": "1967464",
-        "title": "Unknown Grant 1967464",
-        "source": "umich",
-        "url": "https://umich.infoready4.com#competitionDetail/1967464"
-      },
-      {
-        "id": "1983408",
-        "title": "Sloan Research Fellowships",
-        "source": "umich",
-        "url": "https://umich.infoready4.com#competitionDetail/1983408"
-      },
-      {
-        "id": "1983390",
-        "title": "2025 Cohort \u2013 Laboratory Animal Research Coordinator Certification Program",
-        "source": "umich",
-        "url": "https://umich.infoready4.com#competitionDetail/1983390"
-      },
-      {
-        "id": "1983515",
-        "title": "Pathways to Success: Career Readiness through American Expertise",
-        "source": "umich",
-        "url": "https://umich.infoready4.com#competitionDetail/1983515"
-      },
-      {
-        "id": "1983288",
-        "title": "Scalable Memory Architecture Program (SMAP)",
-        "source": "umich",
-        "url": "https://umich.infoready4.com#competitionDetail/1983288"
-      },
-      {
-        "id": "1983513",
-        "title": "Sexual Assault Forensic Exam (SAFE) Hiring and Training Program",
-        "source": "umich",
-        "url": "https://umich.infoready4.com#competitionDetail/1983513"
-      },
-      {
-        "id": "1984058",
-        "title": "Beckman Young Investigators (BYI) Program",
-        "source": "umich",
-        "url": "https://umich.infoready4.com#competitionDetail/1984058"
-      },
-      {
-        "id": "1982991",
-        "title": "The Safe Streets and Roads for All Grant",
-        "source": "umich",
-        "url": "https://umich.infoready4.com#competitionDetail/1982991"
-      },
-      {
-        "id": "1983335",
-        "title": "Investing in health care to prevent harm from firearm injuries and deaths",
-        "source": "umich",
-        "url": "https://umich.infoready4.com#competitionDetail/1983335"
-      },
-      {
-        "id": "1983397",
-        "title": "Fire Prevention and Safety (FP&S) Grant",
-        "source": "umich",
-        "url": "https://umich.infoready4.com#competitionDetail/1983397"
-      }
-    ],
+    "total_grants": 81,
+    "total_seen_ids": 81,
+    "pending_details": 0,
+    "new_grants_last_pull": 81,
+    "last_updated": "2025-08-08 18:17:21",
+    "pending_grants": [],
     "new_grants": []
   }
 }
