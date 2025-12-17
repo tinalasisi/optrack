@@ -270,6 +270,7 @@ def dismiss_any_modal(driver: webdriver.Chrome, timeout: int = 3) -> None:
     1. Tick a 'do not show' checkbox/label if present.
     2. Click Close/×/OK.
     Caches POPUP_DISMISSED so we do this only once per session.
+    Uses JavaScript clicks for better reliability.
     """
     global POPUP_DISMISSED
     if POPUP_DISMISSED:
@@ -286,45 +287,69 @@ def dismiss_any_modal(driver: webdriver.Chrome, timeout: int = 3) -> None:
 
     # iterate through *all* visible modal overlays
     for modal in driver.find_elements(By.CSS_SELECTOR, "div.modal.in, div.modal[style*='display: block']"):
-        if not modal.is_displayed():
+        try:
+            if not modal.is_displayed():
+                continue
+        except Exception:
             continue
 
-        # 1) tick the 'do not show' checkbox if available
+        # 1) tick the 'do not show' checkbox if available - use JavaScript for reliability
         try:
             cb = modal.find_element(By.CSS_SELECTOR, "input[type='checkbox']")
             if cb.is_enabled() and not cb.is_selected():
-                cb.click()
+                driver.execute_script("arguments[0].click();", cb)
+                time.sleep(0.2)  # brief pause after clicking
         except Exception:
-            # fallback: click label containing the phrase
+            pass
+
+        # fallback: try clicking label via JavaScript
+        try:
             labels = modal.find_elements(
                 By.XPATH,
                 ".//*[contains(translate(text(),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'do not show')]"
             )
             for lab in labels:
-                if lab.is_displayed() and lab.is_enabled():
-                    lab.click()
-                    break
+                try:
+                    if lab.is_displayed() and lab.is_enabled():
+                        driver.execute_script("arguments[0].click();", lab)
+                        time.sleep(0.2)
+                        break
+                except Exception:
+                    continue
+        except Exception:
+            pass
 
-        # 2) click a close / ok / × button
+        # 2) click a close / ok / × button using JavaScript
         for sel in ("button.close", "button[data-dismiss='modal']", "button", "a.close"):
             try:
                 btn = modal.find_element(By.CSS_SELECTOR, sel)
                 if btn.is_displayed() and btn.is_enabled():
-                    btn.click()
+                    driver.execute_script("arguments[0].click();", btn)
+                    time.sleep(0.2)
                     break
             except Exception:
                 continue
 
-    # wait until all modals disappear
+    # wait until all modals disappear or just continue if they don't
     try:
-        WebDriverWait(driver, 5).until_not(
+        WebDriverWait(driver, 3).until_not(
             EC.presence_of_element_located(
                 (By.CSS_SELECTOR, "div.modal.in, div.modal[style*='display: block']")
             )
         )
         POPUP_DISMISSED = True
     except TimeoutException:
-        pass
+        # If modal doesn't disappear, try force-removing it via JavaScript
+        try:
+            driver.execute_script("""
+                document.querySelectorAll('div.modal, div.modal-backdrop').forEach(el => {
+                    el.style.display = 'none';
+                    el.remove();
+                });
+            """)
+            POPUP_DISMISSED = True
+        except Exception:
+            pass
 
 
 # ------------------------------------------------------------------
@@ -727,107 +752,133 @@ def scrape_all(
                     logger.info(f"Processing batch {batch_index+1}: items {start_idx+1}-{end_idx}")
                 
                 for idx, a in enumerate(anchors):
-                    # Extract competition ID early for filtering
-                    comp_id = a.get("competitionid", "")
-                    
-                    # Skip if we've seen this ID before AND have its details in the database
-                    if incremental and seen_ids and comp_id in seen_ids and db.has_id(comp_id):
-                        continue
-                    
-                    # Record this ID as seen in this run
-                    if incremental:
-                        ids_seen_this_run.add(comp_id)
-                    
-                    # Extract row-level metadata from the listing table
-                    row = a.find_parent("tr")
-                    cells = row.find_all("td") if row else []
-                    row_data: dict[str, str] = {}
-                    if len(cells) >= 5:
-                        row_data = {
-                            "Due Date": cells[1].get_text(strip=True),
-                            "Organizer": cells[2].get_text(strip=True),
-                            "Category": cells[3].get_text(strip=True),
-                            "Cycle": cells[4].get_text(strip=True),
+                    try:
+                        # Extract competition ID early for filtering
+                        comp_id = a.get("competitionid", "")
+                        
+                        # Skip if we've seen this ID before AND have its details in the database
+                        if incremental and seen_ids and comp_id in seen_ids and db.has_id(comp_id):
+                            continue
+                        
+                        # Record this ID as seen in this run
+                        if incremental:
+                            ids_seen_this_run.add(comp_id)
+                        
+                        # Extract row-level metadata from the listing table
+                        row = a.find_parent("tr")
+                        cells = row.find_all("td") if row else []
+                        row_data: dict[str, str] = {}
+                        if len(cells) >= 5:
+                            row_data = {
+                                "Due Date": cells[1].get_text(strip=True),
+                                "Organizer": cells[2].get_text(strip=True),
+                                "Category": cells[3].get_text(strip=True),
+                                "Cycle": cells[4].get_text(strip=True),
+                            }
+
+                        # 1) quick info from the row
+                        title_text = a.get_text(strip=True)
+                        detail_url = urljoin(base_url, a["href"])
+
+                        # 2) navigate to detail page
+                        driver.get(detail_url)
+                        time.sleep(1)  # brief pause to let page start loading
+                        dismiss_any_modal(driver, timeout=3)
+
+                        # wait for the detail page to finish loading, then look for any selector
+                        try:
+                            WebDriverWait(driver, 10).until(
+                                lambda d: d.execute_script("return document.readyState") == "complete"
+                            )
+                        except TimeoutException:
+                            pass  # continue anyway
+                        
+                        # Try to find detail selectors, but don't fail if they're slow
+                        try:
+                            WebDriverWait(driver, 5).until(
+                                lambda d: d.find_elements(By.CSS_SELECTOR, combined_sel)
+                            )
+                        except TimeoutException:
+                            # Give it a bit more time with explicit wait
+                            time.sleep(2)
+                            if not driver.find_elements(By.CSS_SELECTOR, combined_sel):
+                                print(f"⚠️  Detail selectors not found on {detail_url}, continuing anyway...")
+
+                        # after the container exists, make sure no modal HTML pollutes the page
+                        driver.execute_script("document.querySelectorAll('div.modal').forEach(el => el.remove());")
+
+                        dhtml = driver.page_source
+                        dsoup = BeautifulSoup(dhtml, "html.parser")
+
+                        # ---- generic key/value scrape inside main container ----
+                        details = {}
+                        container = None
+                        for sel in MAIN_DETAIL_SELECTORS:
+                            container = dsoup.select_one(sel)
+                            if container:
+                                break
+                        container = container or dsoup  # fallback whole doc
+
+                        for elem in container.select("div, span, td, li"):
+                            txt = elem.get_text(" ", strip=True)
+                            if ":" not in txt:
+                                continue
+                            key, val = map(str.strip, txt.split(":", 1))
+                            if not key or not val:
+                                continue
+                            if key.lower().startswith(BLOCKED_KEY_PREFIXES):
+                                continue
+                            details[key] = val
+
+                        # Explicit grab of long description block, if present
+                        long_desc = extract_long_description(dsoup)
+
+                        # 3) assemble record
+                        # Merge listing metadata with detail-page key/value pairs
+                        merged_details = { **row_data, **details }
+                        record = {
+                            "title": title_text,
+                            "link": detail_url,
+                            "competition_id": comp_id,
+                            "description_full": long_desc,
+                            "details": merged_details,  # Keep the original key name for backward compatibility
                         }
 
-                    # 1) quick info from the row
-                    title_text = a.get_text(strip=True)
-                    detail_url = urljoin(base_url, a["href"])
+                        # skip pages that produced no real content
+                        if not long_desc and not details:
+                            driver.back()
+                            time.sleep(0.5)
+                            continue
 
-                    # 2) navigate to detail page
-                    driver.get(detail_url)
-                    dismiss_any_modal(driver, timeout=3)
+                        batch.append(record)
 
-                    # wait for the detail page to finish loading, then look for any selector
-                    try:
-                        WebDriverWait(driver, 10).until(
-                            lambda d: d.execute_script("return document.readyState") == "complete"
-                        )
-                        WebDriverWait(driver, 8).until(
-                            lambda d: d.find_elements(By.CSS_SELECTOR, combined_sel)
-                        )
-                    except TimeoutException:
-                        print(f"⚠️  Timeout waiting for detail selectors on {detail_url}")
-
-                    # after the container exists, make sure no modal HTML pollutes the page
-                    driver.execute_script("document.querySelectorAll('div.modal').forEach(el => el.remove());")
-
-                    dhtml = driver.page_source
-                    dsoup = BeautifulSoup(dhtml, "html.parser")
-
-                    # ---- generic key/value scrape inside main container ----
-                    details = {}
-                    container = None
-                    for sel in MAIN_DETAIL_SELECTORS:
-                        container = dsoup.select_one(sel)
-                        if container:
+                        if max_items and len(records) >= max_items:
                             break
-                    container = container or dsoup  # fallback whole doc
+                    
+                        # Stop if we've reached the batch size
+                        if batch_size and len(batch) >= batch_size:
+                            logger.info(f"Reached batch size limit of {batch_size}")
+                            break
 
-                    for elem in container.select("div, span, td, li"):
-                        txt = elem.get_text(" ", strip=True)
-                        if ":" not in txt:
-                            continue
-                        key, val = map(str.strip, txt.split(":", 1))
-                        if not key or not val:
-                            continue
-                        if key.lower().startswith(BLOCKED_KEY_PREFIXES):
-                            continue
-                        details[key] = val
-
-                    # Explicit grab of long description block, if present
-                    long_desc = extract_long_description(dsoup)
-
-                    # 3) assemble record
-                    # Merge listing metadata with detail-page key/value pairs
-                    merged_details = { **row_data, **details }
-                    record = {
-                        "title": title_text,
-                        "link": detail_url,
-                        "competition_id": comp_id,
-                        "description_full": long_desc,
-                        "details": merged_details,  # Keep the original key name for backward compatibility
-                    }
-
-                    # skip pages that produced no real content
-                    if not long_desc and not details:
+                        # 4) back to the listing
                         driver.back()
-                        time.sleep(0.5)
+                        time.sleep(0.8)
+                    
+                    except Exception as e:
+                        print(f"⚠️  Error scraping {detail_url if 'detail_url' in locals() else 'unknown URL'}: {e}")
+                        # Try to recover by going back to the listing page
+                        try:
+                            driver.back()
+                            time.sleep(1)
+                        except Exception:
+                            # If back() fails, reload the listing page
+                            try:
+                                driver.get(base_url + "/#homePage")
+                                time.sleep(2)
+                                dismiss_any_modal(driver, timeout=2)
+                            except Exception:
+                                pass
                         continue
-
-                    batch.append(record)
-
-                    if max_items and len(records) >= max_items:
-                        break
-                
-                    # Stop if we've reached the batch size
-                    if batch_size and len(batch) >= batch_size:
-                        logger.info(f"Reached batch size limit of {batch_size}")
-                        break
-
-                    # 4) back to the listing
-                    driver.back()
-                    time.sleep(0.8)
 
                 if max_items and len(records) >= max_items:
                     break
