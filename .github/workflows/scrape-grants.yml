@@ -49,21 +49,24 @@ jobs:
 
       - name: Restore cookies from secret
         id: restore_cookies
+        env:
+          COOKIES_B64: ${{ secrets.INFOREADY_COOKIES }}
         run: |
-          if [ -z "${{ secrets.INFOREADY_COOKIES }}" ]; then
+          if [ -z "$COOKIES_B64" ]; then
             echo "::error::INFOREADY_COOKIES secret is not set"
             echo "valid=false" >> $GITHUB_OUTPUT
             exit 1
           fi
 
           # Decode base64 cookies and save to file
-          echo "${{ secrets.INFOREADY_COOKIES }}" | base64 -d > data/cookies.pkl
+          # Use printf to avoid newline issues, and tr to remove any whitespace
+          printf '%s' "$COOKIES_B64" | tr -d '[:space:]' | base64 -d > data/cookies.pkl
 
-          if [ -f data/cookies.pkl ]; then
-            echo "Cookies restored successfully"
+          if [ -f data/cookies.pkl ] && [ -s data/cookies.pkl ]; then
+            echo "Cookies restored successfully ($(wc -c < data/cookies.pkl) bytes)"
             echo "valid=true" >> $GITHUB_OUTPUT
           else
-            echo "::error::Failed to restore cookies"
+            echo "::error::Failed to restore cookies or file is empty"
             echo "valid=false" >> $GITHUB_OUTPUT
             exit 1
           fi
@@ -72,18 +75,31 @@ jobs:
         id: check_cookies
         run: |
           # Test if cookies work by making a simple request
-          python -c "
+          python << 'PYTHON_SCRIPT'
+          import os
           import pickle
           import requests
+          import sys
           from pathlib import Path
+
+          def write_output(key, value):
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write(f'{key}={value}\n')
 
           cookies_path = Path('data/cookies.pkl')
           if not cookies_path.exists():
               print('::error::Cookies file not found')
-              exit(1)
+              write_output('valid', 'false')
+              sys.exit(1)
 
-          with open(cookies_path, 'rb') as f:
-              cookies_list = pickle.load(f)
+          try:
+              with open(cookies_path, 'rb') as f:
+                  cookies_list = pickle.load(f)
+              print(f'Loaded {len(cookies_list)} cookies from file')
+          except Exception as e:
+              print(f'::error::Failed to load cookies: {e}')
+              write_output('valid', 'false')
+              sys.exit(1)
 
           # Create a session with cookies
           session = requests.Session()
@@ -108,24 +124,25 @@ jobs:
                   data = resp.json()
                   if 'records' in data or 'Records' in data:
                       print('Cookies are valid - authenticated successfully')
-                      print('valid=true', file=open('$GITHUB_OUTPUT', 'a'))
-                      exit(0)
+                      write_output('valid', 'true')
+                      sys.exit(0)
 
               # Check for redirect to login page
               if 'weblogin' in resp.url.lower() or 'shibboleth' in resp.url.lower():
                   print('::error::Cookies expired - redirected to login')
-                  print('valid=false', file=open('$GITHUB_OUTPUT', 'a'))
-                  exit(1)
+                  write_output('valid', 'false')
+                  sys.exit(1)
 
               print(f'::warning::Unexpected response: {resp.status_code}')
-              print('valid=false', file=open('$GITHUB_OUTPUT', 'a'))
-              exit(1)
+              print(f'Response URL: {resp.url}')
+              write_output('valid', 'false')
+              sys.exit(1)
 
           except Exception as e:
               print(f'::error::Cookie check failed: {e}')
-              print('valid=false', file=open('$GITHUB_OUTPUT', 'a'))
-              exit(1)
-          "
+              write_output('valid', 'false')
+              sys.exit(1)
+          PYTHON_SCRIPT
         continue-on-error: true
 
       - name: Run scraper
