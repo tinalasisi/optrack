@@ -171,6 +171,59 @@ def load_session() -> requests.Session:
     return sess
 
 
+def load_cookies_raw() -> list:
+    """Load raw cookie list from pickle file."""
+    if not COOKIE_PATH.exists():
+        return []
+    try:
+        cookies = pickle.load(COOKIE_PATH.open("rb"))
+        return cookies if cookies else []
+    except (pickle.UnpicklingError, EOFError, ValueError, AttributeError, TypeError):
+        return []
+
+
+def inject_cookies_into_driver(driver: webdriver.Chrome, base_url: str) -> bool:
+    """
+    Inject cookies from pickle file into Selenium driver.
+
+    Args:
+        driver: Selenium Chrome driver
+        base_url: Base URL to load first (required for cookie domain)
+
+    Returns:
+        True if cookies were injected successfully
+    """
+    cookies = load_cookies_raw()
+    if not cookies:
+        logger.warning("No cookies available to inject into Selenium")
+        return False
+
+    try:
+        # First load the domain to set cookie context
+        driver.get(base_url)
+
+        # Inject each cookie
+        injected = 0
+        for cookie in cookies:
+            # Convert expiry to int if needed
+            if 'expiry' in cookie and isinstance(cookie['expiry'], float):
+                cookie['expiry'] = int(cookie['expiry'])
+            try:
+                driver.add_cookie(cookie)
+                injected += 1
+            except Exception as e:
+                logger.debug(f"Could not add cookie {cookie.get('name')}: {e}")
+
+        logger.info(f"Injected {injected}/{len(cookies)} cookies into Selenium")
+
+        # Refresh to apply cookies
+        driver.refresh()
+        return injected > 0
+    except Exception as e:
+        logger.warning(f"Failed to inject cookies: {e}")
+        return False
+
+
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -474,6 +527,9 @@ def scan_for_new_ids(
     new_ids = set()
 
     try:
+        # Inject cookies for authentication
+        inject_cookies_into_driver(driver, base_url)
+
         # Navigate to main listing
         url = f"{base_url}/{LISTING_PATH}"
         logger.info(f"Fast-scanning listings at {url} for site '{site_name}'")
@@ -599,7 +655,10 @@ def scrape_all(
                     logger.info("🙈  JSON endpoint unavailable, switching to Selenium …")
                     use_json = False
                     driver = create_selenium_driver(headless=not visible)  # Use the visible parameter passed to the function
-                    logger.info("Selenium driver initialized successfully")
+                    if driver:
+                        logger.info("Selenium driver initialized successfully")
+                        # Inject cookies into Selenium for authentication
+                        inject_cookies_into_driver(driver, base_url)
                     continue
                 r.raise_for_status()
                 data = r.json()
