@@ -47,7 +47,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from core.source_tracker import SeenIDsTracker, load_seen_ids, save_seen_ids
 from core.append_store import AppendStore  # Import the new AppendStore class
 
-POPUP_DISMISSED = False  # cache so we do not repeatedly search once handled
+# Modal handling is done per-page since modals can appear on any page load
 
 # ------------------------------------------------------------------
 # Constants
@@ -234,11 +234,24 @@ def fetch_html_via_selenium(driver: webdriver.Chrome, url: str) -> str:
     logger.info(f"Fetching URL with Selenium: {url}")
     driver.get(url)
     
+    # Immediately force-remove any modals before they can block interaction
+    try:
+        driver.execute_script("""
+            document.querySelectorAll('div.modal, div.modal-backdrop, .modal-open').forEach(el => {
+                el.style.display = 'none';
+                el.remove();
+            });
+            document.body.classList.remove('modal-open');
+            document.body.style.overflow = '';
+        """)
+    except Exception:
+        pass
+    
     # Log current URL and title for debugging
     logger.info(f"Current URL: {driver.current_url}")
     logger.info(f"Page title: {driver.title}")
     
-    dismiss_any_modal(driver, timeout=3)
+    dismiss_any_modal(driver, timeout=1)  # Reduced timeout since we already forced removal
 
     # wait until the document is fully loaded, then for at least one listing anchor.
     try:
@@ -266,90 +279,53 @@ def fetch_html_via_selenium(driver: webdriver.Chrome, url: str) -> str:
 # ------------------------------------------------------------------
 def dismiss_any_modal(driver: webdriver.Chrome, timeout: int = 3) -> None:
     """
-    Close *any* visible InfoReady modal dialog:
-    1. Tick a 'do not show' checkbox/label if present.
-    2. Click Close/×/OK.
-    Caches POPUP_DISMISSED so we do this only once per session.
-    Uses JavaScript clicks for better reliability.
+    Close *any* visible InfoReady modal dialog (especially maintenance modals).
+    Uses a simple, reliable approach: find visible modals, click checkbox, click OK/Okay button.
+    Always checks for modals since they can appear on any page load.
     """
-    global POPUP_DISMISSED
-    if POPUP_DISMISSED:
-        return
-
-    try:
-        WebDriverWait(driver, timeout).until(
-            EC.presence_of_element_located(
-                (By.CSS_SELECTOR, "div.modal.in, div.modal[style*='display: block']")
-            )
-        )
-    except TimeoutException:
-        return  # no modal present
-
-    # iterate through *all* visible modal overlays
-    for modal in driver.find_elements(By.CSS_SELECTOR, "div.modal.in, div.modal[style*='display: block']"):
+    # Find ALL modal elements (not just those with specific classes)
+    modals = driver.find_elements(By.CSS_SELECTOR, "div.modal")
+    
+    for modal in modals:
         try:
             if not modal.is_displayed():
                 continue
         except Exception:
             continue
-
-        # 1) tick the 'do not show' checkbox if available - use JavaScript for reliability
+        
+        modal_id = modal.get_attribute('id') or 'unknown'
+        logger.info(f"Found visible modal: {modal_id}")
+        
+        # 1) Check the "do not show again" checkbox if present
         try:
-            cb = modal.find_element(By.CSS_SELECTOR, "input[type='checkbox']")
-            if cb.is_enabled() and not cb.is_selected():
-                driver.execute_script("arguments[0].click();", cb)
-                time.sleep(0.2)  # brief pause after clicking
+            checkbox = modal.find_element(By.CSS_SELECTOR, "input[type='checkbox']")
+            if not checkbox.is_selected():
+                driver.execute_script("arguments[0].click();", checkbox)
+                time.sleep(0.2)
+                logger.info("Checked 'do not show again' checkbox")
         except Exception:
             pass
-
-        # fallback: try clicking label via JavaScript
+        
+        # 2) Click the OK/Okay/Close button - search by text content
         try:
-            labels = modal.find_elements(
-                By.XPATH,
-                ".//*[contains(translate(text(),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'do not show')]"
-            )
-            for lab in labels:
-                try:
-                    if lab.is_displayed() and lab.is_enabled():
-                        driver.execute_script("arguments[0].click();", lab)
-                        time.sleep(0.2)
-                        break
-                except Exception:
-                    continue
-        except Exception:
-            pass
-
-        # 2) click a close / ok / × button using JavaScript
-        for sel in ("button.close", "button[data-dismiss='modal']", "button", "a.close"):
-            try:
-                btn = modal.find_element(By.CSS_SELECTOR, sel)
-                if btn.is_displayed() and btn.is_enabled():
+            buttons = modal.find_elements(By.TAG_NAME, "button")
+            for btn in buttons:
+                btn_text = btn.text.lower().strip()
+                if btn_text in ('okay', 'ok', 'close', 'dismiss', 'got it', 'continue'):
                     driver.execute_script("arguments[0].click();", btn)
-                    time.sleep(0.2)
+                    time.sleep(0.3)
+                    logger.info(f"Clicked '{btn.text}' button")
                     break
-            except Exception:
-                continue
-
-    # wait until all modals disappear or just continue if they don't
-    try:
-        WebDriverWait(driver, 3).until_not(
-            EC.presence_of_element_located(
-                (By.CSS_SELECTOR, "div.modal.in, div.modal[style*='display: block']")
-            )
-        )
-        POPUP_DISMISSED = True
-    except TimeoutException:
-        # If modal doesn't disappear, try force-removing it via JavaScript
-        try:
-            driver.execute_script("""
-                document.querySelectorAll('div.modal, div.modal-backdrop').forEach(el => {
-                    el.style.display = 'none';
-                    el.remove();
-                });
-            """)
-            POPUP_DISMISSED = True
-        except Exception:
-            pass
+            else:
+                # If no matching text, just click any visible button (usually OK)
+                for btn in buttons:
+                    if btn.is_displayed() and btn.text.strip():
+                        driver.execute_script("arguments[0].click();", btn)
+                        time.sleep(0.3)
+                        logger.info(f"Clicked button: '{btn.text}'")
+                        break
+        except Exception as e:
+            logger.warning(f"Error clicking modal button: {e}")
 
 
 # ------------------------------------------------------------------
@@ -742,6 +718,7 @@ def scrape_all(
 
                 batch = []
                 combined_sel = ",".join(MAIN_DETAIL_SELECTORS)
+                consecutive_failures = 0  # Track consecutive detail page failures
                 
                 # Handle batching when using Selenium method
                 if batch_size and batch_index > 0:
@@ -751,10 +728,12 @@ def scrape_all(
                     anchors = anchors[start_idx:end_idx]
                     logger.info(f"Processing batch {batch_index+1}: items {start_idx+1}-{end_idx}")
                 
+                logger.info(f"Starting to process {len(anchors)} anchors...")
                 for idx, a in enumerate(anchors):
                     try:
                         # Extract competition ID early for filtering
                         comp_id = a.get("competitionid", "")
+                        logger.info(f"[{idx+1}/{len(anchors)}] Processing competition: {comp_id}")
                         
                         # Skip if we've seen this ID before AND have its details in the database
                         if incremental and seen_ids and comp_id in seen_ids and db.has_id(comp_id):
@@ -793,16 +772,33 @@ def scrape_all(
                         except TimeoutException:
                             pass  # continue anyway
                         
-                        # Try to find detail selectors, but don't fail if they're slow
+                        # Try to find detail selectors, but don't wait long since we scrape the whole page anyway
                         try:
-                            WebDriverWait(driver, 5).until(
+                            WebDriverWait(driver, 1).until(
                                 lambda d: d.find_elements(By.CSS_SELECTOR, combined_sel)
                             )
+                            consecutive_failures = 0  # Reset on success
                         except TimeoutException:
-                            # Give it a bit more time with explicit wait
-                            time.sleep(2)
-                            if not driver.find_elements(By.CSS_SELECTOR, combined_sel):
-                                print(f"⚠️  Detail selectors not found on {detail_url}, continuing anyway...")
+                            # Selectors not found - no problem, we'll scrape the whole page
+                            consecutive_failures += 1
+                            if consecutive_failures <= 3:  # Only log first few
+                                logger.info(f"Using full page scrape for {detail_url}")
+                                
+                                # If we've had many consecutive failures, suggest refreshing cookies
+                                if consecutive_failures >= 5:
+                                    print("\n" + "="*70)
+                                    print("⚠️  MULTIPLE PAGE LOAD FAILURES DETECTED")
+                                    print("="*70)
+                                    print("The scraper is having trouble loading grant detail pages.")
+                                    print("This often happens when modals or notifications block the page.")
+                                    print("\nTo fix this:")
+                                    print("  1. Stop the scraper (Ctrl+C)")
+                                    print("  2. Run: python core/login_and_save_cookies.py")
+                                    print("  3. Dismiss any modals and check 'do not show again'")
+                                    print("  4. Press Enter to save cookies")
+                                    print("  5. Run the scraper again")
+                                    print("="*70 + "\n")
+                                    consecutive_failures = 0  # Reset to avoid spamming
 
                         # after the container exists, make sure no modal HTML pollutes the page
                         driver.execute_script("document.querySelectorAll('div.modal').forEach(el => el.remove());")
