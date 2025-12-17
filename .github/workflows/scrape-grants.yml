@@ -47,6 +47,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Set up Chrome for Selenium
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
       - name: Restore cookies from secret
         id: restore_cookies
         env:
@@ -93,7 +98,8 @@ jobs:
       - name: Check cookie validity
         id: check_cookies
         run: |
-          # Test if cookies work by making a simple request
+          # Test if cookies can be loaded and check for login redirects
+          # Note: 404 is OK - the scraper handles it by falling back to Selenium
           python << 'PYTHON_SCRIPT'
           import os
           import pickle
@@ -130,37 +136,54 @@ jobs:
                   path=cookie.get('path', '/')
               )
 
-          # Test request to check if authenticated
+          # Test request - we mainly check for login redirects
+          # 404 is acceptable since scraper falls back to Selenium
           try:
               resp = session.get(
                   'https://umich.infoready4.com/Search/GetFundingOpportunities',
                   params={'pageNumber': 1, 'pageSize': 1},
                   headers={'Accept': 'application/json'},
-                  timeout=30
+                  timeout=30,
+                  allow_redirects=True
               )
 
-              if resp.status_code == 200:
-                  data = resp.json()
-                  if 'records' in data or 'Records' in data:
-                      print('Cookies are valid - authenticated successfully')
-                      write_output('valid', 'true')
-                      sys.exit(0)
+              print(f'Response status: {resp.status_code}')
+              print(f'Response URL: {resp.url}')
 
-              # Check for redirect to login page
+              # Check for redirect to login page - this means cookies are definitely expired
               if 'weblogin' in resp.url.lower() or 'shibboleth' in resp.url.lower():
-                  print('::error::Cookies expired - redirected to login')
+                  print('::error::Cookies expired - redirected to login page')
                   write_output('valid', 'false')
                   sys.exit(1)
 
-              print(f'::warning::Unexpected response: {resp.status_code}')
-              print(f'Response URL: {resp.url}')
-              write_output('valid', 'false')
-              sys.exit(1)
+              if resp.status_code == 200:
+                  try:
+                      data = resp.json()
+                      if 'records' in data or 'Records' in data or isinstance(data, list):
+                          print('Cookies are valid - JSON API working')
+                          write_output('valid', 'true')
+                          sys.exit(0)
+                  except:
+                      pass
+
+              # 403/404 means JSON API needs Selenium, but cookies might still be valid
+              # Let the scraper try with Selenium fallback
+              if resp.status_code in (403, 404):
+                  print(f'JSON API returned {resp.status_code} - will use Selenium fallback')
+                  print('Cookies loaded successfully, proceeding with scraper')
+                  write_output('valid', 'true')
+                  sys.exit(0)
+
+              # Other errors - still try, let scraper determine
+              print(f'::warning::Unexpected response {resp.status_code}, will attempt scrape anyway')
+              write_output('valid', 'true')
+              sys.exit(0)
 
           except Exception as e:
-              print(f'::error::Cookie check failed: {e}')
-              write_output('valid', 'false')
-              sys.exit(1)
+              print(f'::warning::Cookie check request failed: {e}')
+              print('Will attempt scrape anyway - Selenium may work')
+              write_output('valid', 'true')
+              sys.exit(0)
           PYTHON_SCRIPT
         continue-on-error: true
 
