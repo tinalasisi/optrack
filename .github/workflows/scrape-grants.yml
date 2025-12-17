@@ -58,12 +58,31 @@ jobs:
             exit 1
           fi
 
+          # Debug: Show base64 string info (not the actual content for security)
+          echo "Base64 string length: ${#COOKIES_B64} characters"
+          echo "First 20 chars: ${COOKIES_B64:0:20}..."
+          echo "Last 20 chars: ...${COOKIES_B64: -20}"
+
+          # Check for common issues
+          if [[ "$COOKIES_B64" == "null" ]] || [[ "$COOKIES_B64" == "undefined" ]]; then
+            echo "::error::Secret contains '$COOKIES_B64' instead of base64 data"
+            echo "valid=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
           # Decode base64 cookies and save to file
           # Use printf to avoid newline issues, and tr to remove any whitespace
-          printf '%s' "$COOKIES_B64" | tr -d '[:space:]' | base64 -d > data/cookies.pkl
+          printf '%s' "$COOKIES_B64" | tr -d '[:space:]' | base64 -d > data/cookies.pkl 2>&1 || {
+            echo "::error::Base64 decoding failed"
+            echo "valid=false" >> $GITHUB_OUTPUT
+            exit 1
+          }
 
           if [ -f data/cookies.pkl ] && [ -s data/cookies.pkl ]; then
-            echo "Cookies restored successfully ($(wc -c < data/cookies.pkl) bytes)"
+            FILE_SIZE=$(wc -c < data/cookies.pkl)
+            echo "Cookies restored successfully ($FILE_SIZE bytes)"
+            # Debug: Show first few bytes as hex to verify it's pickle data
+            echo "First 20 bytes (hex): $(head -c 20 data/cookies.pkl | xxd -p)"
             echo "valid=true" >> $GITHUB_OUTPUT
           else
             echo "::error::Failed to restore cookies or file is empty"
