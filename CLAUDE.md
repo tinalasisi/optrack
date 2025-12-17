@@ -120,91 +120,55 @@ All Python commands should be run within the activated virtual environment. Neve
    - `python core/stats.py [--site SITE] [--output FORMAT]`
 9. Use `json_converter.py` for final data preparation as CSV if needed
 
-### Branch Management for Testing
-When testing changes that affect the automated flow using the `auto-updates` branch:
+## Local Cron Job Setup
 
-1. Make and test changes on the `main` branch first
-2. Run tests to verify functionality (`test_shell_scripts.py`, `test_id_comparison.py`)
-3. Ensure proper virtual environment activation with `source venv/bin/activate` before running tests
-4. Once verified, merge changes to the `auto-updates` branch:
-   ```bash
-   git checkout auto-updates
-   git merge main
-   ```
-5. Test again on `auto-updates` branch to ensure everything works properly
-6. Switch back to main branch when done:
-   ```bash
-   git checkout main
-   ```
+For automated scraping, use the local cron setup:
 
-This ensures that any script modifications properly propagate to the branch that runs automated jobs.
-
-## GitHub Actions Automated Scraping (Recommended)
-
-The recommended way to run automated scraping is via GitHub Actions, which runs daily and notifies you when cookies expire.
-
-### Initial Setup
-
-1. **Generate cookies locally** (requires Duo 2FA):
-   ```bash
-   source venv/bin/activate
-   python core/login_and_save_cookies.py
-   ```
-
-2. **Encode cookies for GitHub**:
-   ```bash
-   python scripts/encode_cookies.py
-   ```
-
-3. **Add the secret to GitHub**:
-   - Go to: Repository Settings > Secrets and variables > Actions
-   - Create a new secret named: `INFOREADY_COOKIES`
-   - Paste the base64 string from step 2
-
-4. **Enable the workflow**:
-   - The workflow runs daily at 9 AM UTC
-   - You can also trigger it manually from Actions tab
-
-### Cookie Refresh Notifications
-
-When cookies expire, the workflow automatically:
-- Creates a GitHub Issue titled "Cookie Refresh Required"
-- Labels it with `cookie-refresh-needed`
-- Provides step-by-step instructions to fix
-
-You'll receive GitHub notifications for this issue. After refreshing cookies and updating the secret, close the issue.
-
-### Manual Trigger
-
-You can manually run the scraper from the Actions tab with optional parameters:
-- `site`: Scrape only a specific site (e.g., `umich`)
-- `max_items`: Limit number of items to scrape
-
-## Local Cron Job Setup (Alternative)
-
-For local automated scraping, use the shell scripts:
+### Quick Setup (Interactive)
 
 ```bash
-# Daily incremental update (fast scan + details for new grants only)
-0 9 * * * /path/to/optrack/scripts/optrack_incremental.sh
-
-# Or use the setup_cron.sh helper to configure a cron job:
 ./scripts/setup_cron.sh
 ```
 
-Alternatively, you can set up the process manually:
+This will guide you through setting up a cron job with your preferred schedule.
+
+### Manual Setup
 
 ```bash
-# Daily quick scan (just check for new IDs, very fast)
+# Edit crontab
+crontab -e
+
+# Add one of these lines:
+# Daily at 7 AM (with auto-push to GitHub)
+0 7 * * * cd /path/to/optrack && ./scripts/run_optrack_update.sh --push >> output/logs/cron.log 2>&1
+
+# Daily at 7 AM (local only, no push)
+0 7 * * * cd /path/to/optrack && ./scripts/run_optrack_update.sh >> output/logs/cron.log 2>&1
+```
+
+### Available Scripts
+
+- `scripts/run_optrack_update.sh` - Main update script (runs on current branch)
+  - `--push` - Automatically commit and push changes to GitHub
+  - `--full` - Run full scan instead of incremental
+- `scripts/optrack_incremental.sh` - Incremental scan (fast scan + new grant details)
+- `scripts/optrack_full.sh` - Full database rebuild
+
+### Manual Scraping
+
+```bash
+# Activate virtual environment first
+source venv/bin/activate
+
+# Quick scan (just check for new IDs)
 python utils/scrape_grants.py --site umich --fast-scan
 python utils/scrape_grants.py --site umms --fast-scan
 
-# Weekly full scan (get details for any new grants)
-# Use --incremental to only process new grants
+# Incremental scan (get details for new grants only)
 python utils/scrape_grants.py --site umich --incremental
 python utils/scrape_grants.py --site umms --incremental
 
-# Convert all databases to CSV
+# Convert databases to CSV
 python utils/json_converter.py --site umich
 python utils/json_converter.py --site umms
 ```
