@@ -64,6 +64,9 @@ coverage.xml
 *.envrc
 *.secret
 
+# Cookie secrets (for GitHub Actions)
+data/cookies_base64.txt
+
 # -----------------------
 # IDEs and Text Editors
 # -----------------------

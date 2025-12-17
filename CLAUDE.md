@@ -139,8 +139,50 @@ When testing changes that affect the automated flow using the `auto-updates` bra
 
 This ensures that any script modifications properly propagate to the branch that runs automated jobs.
 
-## Cron Job Setup
-For automated scraping, use the shell scripts:
+## GitHub Actions Automated Scraping (Recommended)
+
+The recommended way to run automated scraping is via GitHub Actions, which runs daily and notifies you when cookies expire.
+
+### Initial Setup
+
+1. **Generate cookies locally** (requires Duo 2FA):
+   ```bash
+   source venv/bin/activate
+   python core/login_and_save_cookies.py
+   ```
+
+2. **Encode cookies for GitHub**:
+   ```bash
+   python scripts/encode_cookies.py
+   ```
+
+3. **Add the secret to GitHub**:
+   - Go to: Repository Settings > Secrets and variables > Actions
+   - Create a new secret named: `INFOREADY_COOKIES`
+   - Paste the base64 string from step 2
+
+4. **Enable the workflow**:
+   - The workflow runs daily at 9 AM UTC
+   - You can also trigger it manually from Actions tab
+
+### Cookie Refresh Notifications
+
+When cookies expire, the workflow automatically:
+- Creates a GitHub Issue titled "Cookie Refresh Required"
+- Labels it with `cookie-refresh-needed`
+- Provides step-by-step instructions to fix
+
+You'll receive GitHub notifications for this issue. After refreshing cookies and updating the secret, close the issue.
+
+### Manual Trigger
+
+You can manually run the scraper from the Actions tab with optional parameters:
+- `site`: Scrape only a specific site (e.g., `umich`)
+- `max_items`: Limit number of items to scrape
+
+## Local Cron Job Setup (Alternative)
+
+For local automated scraping, use the shell scripts:
 
 ```bash
 # Daily incremental update (fast scan + details for new grants only)

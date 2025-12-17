@@ -1,39 +1,49 @@
+#!/usr/bin/env python3
 """
 encode_cookies.py
-Reads cookies.pkl and outputs a base64-encoded string for GitHub Secrets.
+
+Encodes cookies.pkl as base64 for use as a GitHub secret.
+Run this after login_and_save_cookies.py to get the string to paste into GitHub.
 """
 
 import base64
-import pickle
+import sys
 from pathlib import Path
 
 COOKIE_PATH = Path("data/cookies.pkl")
 
+
 def main() -> None:
     if not COOKIE_PATH.exists():
-        print(f"❌ Cookie file not found: {COOKIE_PATH.resolve()}")
-        print("Run 'python core/login_and_save_cookies.py' first to generate cookies.")
-        return
+        print("Error: data/cookies.pkl not found!")
+        print("")
+        print("First run: python core/login_and_save_cookies.py")
+        print("Then run this script again.")
+        sys.exit(1)
 
-    # Read the pickle file
-    with COOKIE_PATH.open("rb") as fh:
-        cookie_data = fh.read()
-    
-    # Encode to base64
-    encoded = base64.b64encode(cookie_data).decode('utf-8')
-    
-    print("=" * 80)
-    print("📋 Base64-encoded cookies for GitHub Secret:")
-    print("=" * 80)
+    # Read and encode
+    with open(COOKIE_PATH, "rb") as f:
+        cookie_data = f.read()
+
+    encoded = base64.b64encode(cookie_data).decode("utf-8")
+
+    print("=" * 60)
+    print("GITHUB SECRET VALUE")
+    print("=" * 60)
+    print("")
+    print("Copy the entire string below (it's all one line):")
+    print("")
     print(encoded)
-    print("=" * 80)
-    print()
+    print("")
+    print("=" * 60)
+    print("")
     print("Next steps:")
-    print("1. Copy the string above")
-    print("2. Go to: Repository Settings > Secrets and variables > Actions")
-    print("3. Create or update secret: INFOREADY_COOKIES")
-    print("4. Paste the base64 string")
-    print()
+    print("1. Go to your repo: Settings > Secrets and variables > Actions")
+    print("2. Create or update secret named: INFOREADY_COOKIES")
+    print("3. Paste the base64 string above as the value")
+    print("")
+    print("⚠️  Note: Copy the string now - it won't be saved to disk for security.")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
