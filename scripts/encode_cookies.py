@@ -60,17 +60,6 @@ def main() -> None:
     print("1. Go to your repo: Settings > Secrets and variables > Actions")
     print("2. Create or update secret named: INFOREADY_COOKIES")
     print("3. Paste the base64 string above as the value")
-    print("")
-
-    # Also save to a file for convenience (easier to copy from)
-    # This file is gitignored so it won't be committed
-    output_file = Path("data/cookies_base64.txt")
-    with open(output_file, "w") as f:
-        f.write(encoded)
-    print(f"Also saved to: {output_file}")
-    print("TIP: You can copy directly from this file to avoid formatting issues")
-    print("     cat data/cookies_base64.txt | pbcopy  # macOS")
-    print("     cat data/cookies_base64.txt | xclip   # Linux")
 
 
 if __name__ == "__main__":
